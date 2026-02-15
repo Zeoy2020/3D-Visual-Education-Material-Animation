@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Single Object Tracking Demo</title>
+    <style>
+      :root {
+        --bg-0: #ffffff;
+        --bg-1: #f5f8fc;
+        --line: rgba(150, 185, 230, 0.24);
+        --text: #e7eefc;
+        --text-dim: #98a8c4;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background:
+          radial-gradient(1200px 620px at 18% 18%, rgba(61, 129, 210, 0.08), transparent 70%),
+          radial-gradient(980px 540px at 87% 8%, rgba(74, 171, 166, 0.06), transparent 72%),
+          linear-gradient(160deg, var(--bg-0), var(--bg-1));
+        color: var(--text);
+        font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      #app {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      #top-header {
+        height: 56px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(120deg, rgba(12, 24, 42, 0.92), rgba(10, 18, 34, 0.84));
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+      }
+
+      #top-header h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      #status-pill {
+        border: 1px solid rgba(123, 185, 255, 0.4);
+        border-radius: 999px;
+        background: rgba(62, 122, 193, 0.18);
+        color: #dbe8ff;
+        padding: 6px 10px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      #content {
+        min-height: 0;
+        flex: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 10px;
+      }
+
+      #viewport-panel {
+        position: relative;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        overflow: hidden;
+        background: #ffffff;
+      }
+
+      #three-root {
+        position: absolute;
+        inset: 0;
+      }
+
+      #stage-overlay {
+        position: absolute;
+        left: 10px;
+        top: 10px;
+        width: 300px;
+        max-width: calc(100% - 20px);
+        border-radius: 10px;
+        border: 1px solid rgba(106, 154, 211, 0.38);
+        background: rgba(255, 255, 255, 0.82);
+        backdrop-filter: blur(3px);
+        padding: 8px;
+        display: grid;
+        gap: 6px;
+        pointer-events: none;
+      }
+
+      .stage-mini {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 6px;
+        border-radius: 8px;
+        border: 1px solid rgba(140, 178, 221, 0.38);
+        background: rgba(244, 249, 255, 0.9);
+        color: #3e5778;
+        font-size: 11px;
+        transition: background 0.22s ease, border-color 0.22s ease, color 0.22s ease, transform 0.22s ease;
+      }
+
+      .stage-mini .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(97, 143, 203, 0.82);
+        box-shadow: 0 0 0 1px rgba(167, 199, 236, 0.55);
+      }
+
+      .stage-mini.done {
+        color: #1f7a53;
+        border-color: rgba(74, 171, 126, 0.46);
+        background: rgba(234, 251, 241, 0.95);
+      }
+
+      .stage-mini.done .dot {
+        background: #35c87d;
+      }
+
+      .stage-mini.active {
+        color: #123c67;
+        border-color: rgba(82, 155, 222, 0.72);
+        background: linear-gradient(135deg, rgba(231, 244, 255, 0.97), rgba(213, 233, 255, 0.95));
+        transform: translateX(2px);
+      }
+
+      .stage-mini.active .dot {
+        background: #2f93ff;
+        box-shadow: 0 0 10px rgba(85, 157, 230, 0.55);
+      }
+
+      #template-card {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        width: 252px;
+        border-radius: 14px;
+        border: 1px solid rgba(106, 154, 211, 0.38);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 252, 255, 0.93));
+        backdrop-filter: blur(4px);
+        box-shadow: 0 8px 24px rgba(34, 68, 112, 0.12);
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+        pointer-events: none;
+        color: #35567c;
+      }
+
+      #template-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      #template-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: #1b4f85;
+      }
+
+      #template-badge {
+        font-size: 10px;
+        color: #2d649d;
+        border: 1px solid rgba(104, 150, 205, 0.42);
+        background: rgba(234, 245, 255, 0.9);
+        border-radius: 999px;
+        padding: 2px 7px;
+      }
+
+      #template-3d-root {
+        width: 100%;
+        height: 120px;
+        border-radius: 10px;
+        border: 1px solid rgba(122, 166, 214, 0.44);
+        background: linear-gradient(180deg, #fcfeff, #f5faff);
+        overflow: hidden;
+      }
+
+      #template-3d-root canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #template-score-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 7px;
+        font-size: 10px;
+        color: #4d6990;
+      }
+
+      #template-score-bar {
+        height: 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(124, 167, 213, 0.42);
+        background: rgba(231, 241, 252, 0.95);
+        overflow: hidden;
+      }
+
+      #template-score-fill {
+        width: 0%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #5aaeff, #22c55e);
+        transition: width 0.12s linear;
+      }
+
+      #template-score-text {
+        min-width: 38px;
+        text-align: right;
+        color: #1e5f99;
+        font-weight: 600;
+      }
+
+      #template-meta-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+
+      .template-kv {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 10px;
+        color: #4b678d;
+        border-radius: 8px;
+        border: 1px solid rgba(129, 172, 216, 0.38);
+        background: rgba(244, 249, 255, 0.9);
+        padding: 5px 6px;
+      }
+
+      .template-kv strong {
+        color: #1e5a93;
+        font-weight: 600;
+      }
+
+      #template-state-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 10px;
+        color: #4b678d;
+        border-radius: 8px;
+        border: 1px solid rgba(129, 172, 216, 0.38);
+        background: rgba(244, 249, 255, 0.9);
+        padding: 5px 6px;
+      }
+
+      #template-state {
+        color: #1f4f88;
+        font-family: "IBM Plex Mono", "Menlo", "Consolas", monospace;
+        font-size: 10px;
+        background: rgba(232, 243, 255, 0.85);
+        border-radius: 5px;
+        padding: 2px 5px;
+      }
+
+      #timeline-panel {
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(13, 25, 45, 0.9), rgba(8, 15, 27, 0.9));
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      #timeline-panel h2 {
+        margin: 4px 2px 8px;
+        font-size: 14px;
+        color: #dbe7ff;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      #timeline-list {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        display: grid;
+        gap: 8px;
+        padding-right: 4px;
+      }
+
+      .step-card {
+        border-radius: 10px;
+        border: 1px solid rgba(165, 199, 240, 0.18);
+        background: rgba(8, 17, 32, 0.72);
+        padding: 8px;
+        transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
+      }
+
+      .step-card .step-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .step-index {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(166, 202, 255, 0.25);
+        color: #bcd0f1;
+      }
+
+      .step-title {
+        flex: 1;
+        font-size: 12px;
+        font-weight: 600;
+        color: #dde9ff;
+      }
+
+      .step-card p {
+        margin: 6px 0 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--text-dim);
+      }
+
+      .step-card .tensor {
+        color: #8ed0ff;
+      }
+
+      .step-card .what {
+        color: #bfd4ff;
+      }
+
+      .step-card.active {
+        border-color: rgba(122, 195, 255, 0.78);
+        background: linear-gradient(145deg, rgba(18, 40, 70, 0.92), rgba(10, 24, 44, 0.9));
+        transform: translateX(-2px);
+      }
+
+      .step-card.done {
+        border-color: rgba(90, 176, 140, 0.36);
+        background: rgba(8, 22, 28, 0.74);
+      }
+
+      #control-bar {
+        height: 76px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(120deg, rgba(11, 21, 37, 0.92), rgba(8, 14, 24, 0.84));
+        padding: 8px 10px;
+        display: grid;
+        grid-template-columns: auto auto auto minmax(180px, 1fr) auto auto;
+        align-items: center;
+        gap: 8px;
+      }
+
+      button,
+      .speed-btn {
+        border: 1px solid rgba(157, 195, 240, 0.28);
+        background: rgba(20, 38, 63, 0.62);
+        color: #dde9ff;
+        height: 36px;
+        border-radius: 9px;
+        padding: 0 12px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: border-color 0.2s ease, background 0.2s ease, transform 0.12s ease;
+      }
+
+      button:hover,
+      .speed-btn:hover {
+        border-color: rgba(141, 203, 255, 0.7);
+        background: rgba(39, 71, 112, 0.62);
+      }
+
+      button:active,
+      .speed-btn:active {
+        transform: translateY(1px);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      #scrub {
+        width: 100%;
+        accent-color: #77d4ff;
+      }
+
+      #speed-group {
+        display: inline-flex;
+        border-radius: 9px;
+        overflow: hidden;
+        border: 1px solid rgba(153, 193, 240, 0.28);
+      }
+
+      .speed-btn {
+        min-width: 52px;
+        border: 0;
+        border-right: 1px solid rgba(153, 193, 240, 0.22);
+        border-radius: 0;
+      }
+
+      .speed-btn:last-child {
+        border-right: 0;
+      }
+
+      .speed-btn.active {
+        background: rgba(79, 157, 255, 0.38);
+        color: #ffffff;
+      }
+
+      .box-label {
+        color: #f4f8ff;
+        font-size: 11px;
+        line-height: 1.1;
+        padding: 4px 7px;
+        border-radius: 8px;
+        border: 1px solid rgba(210, 228, 255, 0.38);
+        background: rgba(10, 18, 33, 0.78);
+        white-space: nowrap;
+        user-select: none;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s linear;
+      }
+
+      @media (max-width: 1180px) {
+        #content {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(320px, 1fr) 340px;
+        }
+
+        #control-bar {
+          grid-template-columns: auto auto auto minmax(120px, 1fr) auto;
+          grid-template-rows: 1fr 1fr;
+          height: auto;
+        }
+
+        #speed-group {
+          grid-column: 4 / span 2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header id="top-header">
+        <h1>3D Single Object Tracking (Demo)</h1>
+        <div id="status-pill">Step 1 / 4</div>
+      </header>
+
+      <section id="content">
+        <div id="viewport-panel">
+          <div id="three-root"></div>
+          <div id="stage-overlay"></div>
+
+          <div id="template-card">
+            <div id="template-header">
+              <div id="template-title">Template</div>
+              <div id="template-badge">3D Patch</div>
+            </div>
+            <div id="template-3d-root"></div>
+            <div id="template-score-row">
+              <span>Match</span>
+              <div id="template-score-bar"><div id="template-score-fill"></div></div>
+              <strong id="template-score-text">0%</strong>
+            </div>
+            <div id="template-meta-grid">
+              <div class="template-kv"><span>Track</span><strong id="template-track">#07</strong></div>
+              <div class="template-kv"><span>Frame</span><strong id="template-frame">f1</strong></div>
+            </div>
+            <div id="template-state-row"><span>State</span><code id="template-state">(0.00, 0.00, 0.00)</code></div>
+          </div>
+        </div>
+
+        <aside id="timeline-panel">
+          <h2>Tracking Timeline</h2>
+          <div id="timeline-list"></div>
+        </aside>
+      </section>
+
+      <footer id="control-bar">
+        <button id="playPause">Pause</button>
+        <button id="prevStep">Prev</button>
+        <button id="nextStep">Next</button>
+        <input id="scrub" type="range" min="0" max="1000" value="0" />
+        <div id="speed-group">
+          <button class="speed-btn" data-speed="0.5">0.5x</button>
+          <button class="speed-btn active" data-speed="1">1x</button>
+          <button class="speed-btn" data-speed="2">2x</button>
+        </div>
+        <button id="resetView">Reset View</button>
+      </footer>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+      import { Line2 } from "three/addons/lines/Line2.js";
+      import { LineGeometry } from "three/addons/lines/LineGeometry.js";
+      import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+      import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+      import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+
+      const STEPS = [
+        {
+          id: "posterior_prev",
+          duration: 2.8,
+          title: "Posterior at t-1",
+          description: "上一时刻已经有一个稳定的绿色后验框 x_(t-1)，作为当前跟踪的起点状态。",
+          tensor: "关键概念: posterior state x_(t-1)",
+          what: "你正在看到什么: 绿色后验框（t-1）稳定覆盖目标。"
+        },
+        {
+          id: "candidate_set",
+          duration: 3.6,
+          title: "Candidate set at t",
+          description: "当前时刻 t 的观测候选 z_t^i 以橙色框给出，位置围绕 t-1 的绿色后验框附近。",
+          tensor: "关键概念: candidate observations {z_t^i}",
+          what: "你正在看到什么: 多个橙色候选框在绿色框周围出现。"
+        },
+        {
+          id: "matching",
+          duration: 5.2,
+          title: "Matching",
+          description: "模板与全部候选做匹配，得分最高的候选框标红，其余候选淡出；绿色后验框移动到红框位置，红框随后消失。",
+          tensor: "关键概念: argmax similarity(z_t^i)",
+          what: "你正在看到什么: 红框代表最优匹配，绿色框完成状态更新位移。"
+        },
+        {
+          id: "loop",
+          duration: 11.8,
+          title: "Loop: Repeat Candidate + Matching",
+          description: "后续帧持续重复“候选集 -> 匹配 -> 位移更新”，每次移动都会新增并保留一段绿色直线轨迹。",
+          tensor: "关键概念: recursive tracking loop",
+          what: "你正在看到什么: 轨迹线段逐步累积，展示连续跟踪路径。"
+        }
+      ];
+
+      const totalDuration = STEPS.reduce((a, s) => a + s.duration, 0);
+      const STEP_DISPLAY_NUMS = [1, 2, 3, 4];
+      const TOTAL_DISPLAY_STEPS = 4;
+      const stepStarts = [];
+      {
+        let acc = 0;
+        for (const s of STEPS) {
+          stepStarts.push(acc);
+          acc += s.duration;
+        }
+      }
+
+      const TOTAL_FRAMES = 180;
+      const TRACK_ID = 7;
+      const STATIC_PREV_FRAME = 44;
+      const STATIC_CURR_FRAME = 58;
+      const LOOP_CYCLES = 4;
+      const LOOP_STRIDE = 14;
+      const OBS_BOX_COUNT = 5;
+
+      const viewport = document.getElementById("three-root");
+      const timelineList = document.getElementById("timeline-list");
+      const stageOverlay = document.getElementById("stage-overlay");
+      const statusPill = document.getElementById("status-pill");
+      const template3DRoot = document.getElementById("template-3d-root");
+      const templateTrackEl = document.getElementById("template-track");
+      const templateFrameEl = document.getElementById("template-frame");
+      const templateStateEl = document.getElementById("template-state");
+      const templateScoreFillEl = document.getElementById("template-score-fill");
+      const templateScoreTextEl = document.getElementById("template-score-text");
+
+      const playPauseBtn = document.getElementById("playPause");
+      const prevStepBtn = document.getElementById("prevStep");
+      const nextStepBtn = document.getElementById("nextStep");
+      const scrub = document.getElementById("scrub");
+      const speedButtons = [...document.querySelectorAll(".speed-btn")];
+      const resetViewBtn = document.getElementById("resetView");
+
+      const stepCards = STEPS.map((step, i) => {
+        const card = document.createElement("div");
+        card.className = "step-card";
+        card.innerHTML = `
+          <div class="step-top">
+            <span class="step-index">Step ${STEP_DISPLAY_NUMS[i]}</span>
+            <span class="step-title">${step.title}</span>
+          </div>
+          <p>${step.description}</p>
+          <p class="tensor">${step.tensor}</p>
+          <p class="what">${step.what}</p>
+        `;
+        timelineList.appendChild(card);
+        return card;
+      });
+
+      const stageMiniNodes = STEPS.map((step, i) => {
+        const row = document.createElement("div");
+        row.className = "stage-mini";
+        row.innerHTML = `<span class="dot"></span><span>${STEP_DISPLAY_NUMS[i]}. ${step.title}</span>`;
+        stageOverlay.appendChild(row);
+        return row;
+      });
+
+      const clamp = THREE.MathUtils.clamp;
+      const lerp = THREE.MathUtils.lerp;
+      const smooth = (x) => {
+        const t = clamp(x, 0, 1);
+        return t * t * (3 - 2 * t);
+      };
+
+      const rand = (a, b) => a + Math.random() * (b - a);
+
+      function vecLerp(a, b, t) {
+        return new THREE.Vector3(lerp(a.x, b.x, t), lerp(a.y, b.y, t), lerp(a.z, b.z, t));
+      }
+
+      function getFrameVector(arr, f) {
+        const i0 = Math.floor(f);
+        const i1 = Math.min(arr.length - 1, i0 + 1);
+        const t = f - i0;
+        return vecLerp(arr[i0], arr[i1], t);
+      }
+
+      function stepIndexAt(timeSec) {
+        for (let i = STEPS.length - 1; i >= 0; i -= 1) {
+          if (timeSec >= stepStarts[i]) return i;
+        }
+        return 0;
+      }
+
+      function stepProgress(stepIdx, t) {
+        const st = stepStarts[stepIdx];
+        const ed = st + STEPS[stepIdx].duration;
+        return clamp((t - st) / (ed - st), 0, 1);
+      }
+
+      function jumpToStep(i) {
+        const idx = clamp(i, 0, STEPS.length - 1);
+        setPlayhead(stepStarts[idx] + 0.0001);
+      }
+
+      function mulberry32(seed) {
+        let s = seed >>> 0;
+        return () => {
+          s += 0x6d2b79f5;
+          let t = s;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      const trueCenters = [];
+      for (let i = 0; i < TOTAL_FRAMES; i += 1) {
+        const t = i / (TOTAL_FRAMES - 1);
+        trueCenters.push(
+          new THREE.Vector3(
+            -4.0 + 8.0 * t,
+            1.0,
+            -1.3 + 2.6 * Math.sin(t * Math.PI * 1.7 + 0.2)
+          )
+        );
+      }
+
+      const obsCandidates = [];
+      const obsScores = [];
+      const templateMatchScores = [];
+
+      const detSeedRng = mulberry32(17);
+      const OBS_JITTER = () => (detSeedRng() - 0.5);
+
+      const baseObserved = trueCenters.map((c) =>
+        c.clone().add(new THREE.Vector3(OBS_JITTER() * 0.26, OBS_JITTER() * 0.08, OBS_JITTER() * 0.24))
+      );
+
+      for (let i = 0; i < TOTAL_FRAMES; i += 1) {
+        const anchor = baseObserved[i];
+        const cs = [];
+        const sc = [];
+
+        cs.push(anchor.clone().add(new THREE.Vector3(OBS_JITTER() * 0.12, OBS_JITTER() * 0.04, OBS_JITTER() * 0.12)));
+        sc.push(clamp(0.86 + 0.08 * Math.sin(i * 0.17 + 0.5) + OBS_JITTER() * 0.03, 0.74, 0.98));
+
+        for (let j = 1; j < OBS_BOX_COUNT; j += 1) {
+          const angle = i * 0.2 + j * ((Math.PI * 2) / (OBS_BOX_COUNT - 1)) + (j % 2) * 0.34;
+          const radius = 1.9 + 0.72 * j + 0.4 * Math.sin(i * 0.12 + j * 0.8);
+          const off = new THREE.Vector3(
+            Math.cos(angle) * radius,
+            OBS_JITTER() * 0.1,
+            Math.sin(angle) * radius * 0.72
+          );
+          cs.push(anchor.clone().add(off));
+          sc.push(clamp(0.35 + 0.22 * Math.sin(i * 0.08 + j * 1.2) + OBS_JITTER() * 0.03, 0.2, 0.73));
+        }
+
+        obsCandidates.push(cs);
+        obsScores.push(sc);
+      }
+
+      const matchSeedRng = mulberry32(9027);
+      function computeTemplateMatchScore(frameIdx, obsCenter, detScore) {
+        // Pseudo appearance similarity: template prefers observations close to the true target shape/location.
+        const d = obsCenter.distanceTo(trueCenters[frameIdx]);
+        const distTerm = Math.exp(-(d * d) / (2 * 1.28 * 1.28));
+        const jitter = (matchSeedRng() - 0.5) * 0.035;
+        return clamp(0.76 * distTerm + 0.22 * detScore + jitter, 0.02, 0.99);
+      }
+
+      for (let i = 0; i < TOTAL_FRAMES; i += 1) {
+        const ms = [];
+        for (let j = 0; j < OBS_BOX_COUNT; j += 1) {
+          ms.push(computeTemplateMatchScore(i, obsCandidates[i][j], obsScores[i][j]));
+        }
+        templateMatchScores.push(ms);
+      }
+
+      const trackPred = [];
+      const trackUpdate = [];
+
+      {
+        let state = obsCandidates[0][0].clone();
+        let vel = new THREE.Vector3(0, 0, 0);
+
+        trackPred.push(state.clone());
+        trackUpdate.push(state.clone());
+
+        for (let i = 1; i < TOTAL_FRAMES; i += 1) {
+          const pred = state.clone().add(vel);
+          trackPred.push(pred.clone());
+
+          let best = 0;
+          let bestScore = -Infinity;
+          for (let j = 0; j < OBS_BOX_COUNT; j += 1) {
+            const score = templateMatchScores[i][j];
+            if (score > bestScore) {
+              bestScore = score;
+              best = j;
+            }
+          }
+
+          const matched = obsCandidates[i][best];
+          const updated = pred.clone().lerp(matched, 0.58);
+          const dv = updated.clone().sub(state);
+          vel.lerp(dv, 0.68);
+          state = updated;
+          trackUpdate.push(updated.clone());
+        }
+      }
+
+      // ---------- Scene ----------
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color("#ffffff");
+      scene.fog = new THREE.Fog("#edf3fb", 34, 72);
+
+      const camera = new THREE.PerspectiveCamera(50, viewport.clientWidth / viewport.clientHeight, 0.1, 220);
+      const cameraInitPos = new THREE.Vector3(20, 14, 18);
+      const targetInit = new THREE.Vector3(0, 1.2, 0);
+      camera.position.copy(cameraInitPos);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      viewport.appendChild(renderer.domElement);
+
+      const labelRenderer = new CSS2DRenderer();
+      labelRenderer.setSize(viewport.clientWidth, viewport.clientHeight);
+      labelRenderer.domElement.style.position = "absolute";
+      labelRenderer.domElement.style.inset = "0";
+      labelRenderer.domElement.style.pointerEvents = "none";
+      viewport.appendChild(labelRenderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.07;
+      controls.enablePan = true;
+      controls.target.copy(targetInit);
+      controls.minDistance = 8;
+      controls.maxDistance = 50;
+      controls.maxPolarAngle = Math.PI * 0.49;
+
+      const hemi = new THREE.HemisphereLight(0xbfdfff, 0xebf2fb, 0.78);
+      scene.add(hemi);
+      const key = new THREE.DirectionalLight(0xc7ddff, 0.88);
+      key.position.set(16, 28, 8);
+      scene.add(key);
+      const rim = new THREE.DirectionalLight(0x6bb2ff, 0.34);
+      rim.position.set(-14, 8, -12);
+      scene.add(rim);
+
+      // ---------- Point Cloud ----------
+      const GROUND_N = 1350;
+      const TARGET_N = 360;
+      const groundPts = Array.from({ length: GROUND_N }, () => ({ x: rand(-13, 13), y: rand(-0.02, 0.03), z: rand(-9, 9) }));
+      const targetOffsets = Array.from({ length: TARGET_N }, () => ({ x: rand(-2.2, 2.2), y: rand(-0.45, 0.66), z: rand(-1.02, 1.02) }));
+
+      const pcPositions = new Float32Array((GROUND_N + TARGET_N) * 3);
+      const pcGeom = new THREE.BufferGeometry();
+      pcGeom.setAttribute("position", new THREE.BufferAttribute(pcPositions, 3));
+      const pcMat = new THREE.PointsMaterial({ color: 0x111111, size: 0.15, transparent: true, opacity: 0.95, depthWrite: false });
+      const pointCloud = new THREE.Points(pcGeom, pcMat);
+      scene.add(pointCloud);
+
+      function updatePointCloud(center) {
+        let idx = 0;
+        for (const p of groundPts) {
+          pcPositions[idx++] = p.x;
+          pcPositions[idx++] = p.y;
+          pcPositions[idx++] = p.z;
+        }
+        for (const o of targetOffsets) {
+          pcPositions[idx++] = center.x + o.x;
+          pcPositions[idx++] = Math.max(0.02, center.y + o.y);
+          pcPositions[idx++] = center.z + o.z;
+        }
+        pcGeom.attributes.position.needsUpdate = true;
+      }
+
+      // ---------- Template Mini 3D ----------
+      const templateMiniScene = new THREE.Scene();
+      const templateMiniCamera = new THREE.PerspectiveCamera(44, 1, 0.1, 40);
+      templateMiniCamera.position.set(4.8, 3.1, 4.7);
+      templateMiniCamera.lookAt(0, 0.8, 0);
+
+      const templateMiniRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+      templateMiniRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      templateMiniRenderer.setSize(Math.max(1, template3DRoot.clientWidth), Math.max(1, template3DRoot.clientHeight));
+      templateMiniRenderer.setClearColor(0xffffff, 0);
+      templateMiniRenderer.outputColorSpace = THREE.SRGBColorSpace;
+      templateMiniRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+      templateMiniRenderer.toneMappingExposure = 1.04;
+      template3DRoot.appendChild(templateMiniRenderer.domElement);
+
+      const templateMiniHemi = new THREE.HemisphereLight(0xe2f0ff, 0xf1f6fd, 0.94);
+      templateMiniScene.add(templateMiniHemi);
+      const templateMiniKey = new THREE.DirectionalLight(0xb8d7ff, 0.9);
+      templateMiniKey.position.set(4, 8, 3);
+      templateMiniScene.add(templateMiniKey);
+
+      const templateMiniGrid = new THREE.GridHelper(6, 10, 0xa4c3e6, 0xdbe8f8);
+      templateMiniGrid.position.y = 0.02;
+      templateMiniScene.add(templateMiniGrid);
+
+      const templateMiniGroup = new THREE.Group();
+      templateMiniGroup.position.set(0, 0.92, 0);
+      templateMiniScene.add(templateMiniGroup);
+
+      const templateMiniCount = Math.floor(targetOffsets.length / 2);
+      const templateMiniPos = new Float32Array(templateMiniCount * 3);
+      for (let i = 0; i < templateMiniCount; i += 1) {
+        const o = targetOffsets[i * 2];
+        const k = i * 3;
+        templateMiniPos[k] = o.x;
+        templateMiniPos[k + 1] = o.y + 0.02;
+        templateMiniPos[k + 2] = o.z;
+      }
+      const templateMiniGeom = new THREE.BufferGeometry();
+      templateMiniGeom.setAttribute("position", new THREE.BufferAttribute(templateMiniPos, 3));
+      const templateMiniPtsMat = new THREE.PointsMaterial({ color: 0x1b2736, size: 0.095, transparent: true, opacity: 0.94, depthWrite: false });
+      const templateMiniPoints = new THREE.Points(templateMiniGeom, templateMiniPtsMat);
+      templateMiniGroup.add(templateMiniPoints);
+
+      const templateBoxSize = new THREE.Vector3(4.6, 1.7, 2.0);
+      const templateBoxGeom = new THREE.BoxGeometry(templateBoxSize.x, templateBoxSize.y, templateBoxSize.z);
+      const templateBoxFillMat = new THREE.MeshStandardMaterial({
+        color: 0x00c96d,
+        emissive: 0x00c96d,
+        emissiveIntensity: 0.12,
+        transparent: true,
+        opacity: 0.12,
+        depthWrite: false,
+        roughness: 0.35,
+        metalness: 0.05
+      });
+      const templateBoxFill = new THREE.Mesh(templateBoxGeom, templateBoxFillMat);
+      templateMiniGroup.add(templateBoxFill);
+
+      const templateBoxEdge = new THREE.LineSegments(
+        new THREE.EdgesGeometry(templateBoxGeom),
+        new THREE.LineBasicMaterial({ color: 0x00b06a, transparent: true, opacity: 0.96 })
+      );
+      templateMiniGroup.add(templateBoxEdge);
+
+      const templateColorTmp = new THREE.Color();
+      const templateColorLow = new THREE.Color(0x3b9cff);
+      const templateColorHigh = new THREE.Color(0x00b86a);
+
+      function drawTemplatePreview(templateCenter, frameDisplayIdx, matchScore, timeSec = 0) {
+        const score01 = clamp(matchScore, 0, 1);
+        const yaw = 0.22 + 0.26 * Math.sin(timeSec * 0.75);
+        templateMiniGroup.rotation.y = yaw;
+        templateMiniGroup.position.y = 0.92 + 0.03 * Math.sin(timeSec * 1.2);
+
+        templateColorTmp.copy(templateColorLow).lerp(templateColorHigh, score01);
+        templateBoxFillMat.color.copy(templateColorTmp);
+        templateBoxFillMat.emissive.copy(templateColorTmp);
+        templateBoxEdge.material.color.copy(templateColorTmp);
+
+        templateTrackEl.textContent = `#${TRACK_ID}`;
+        templateFrameEl.textContent = `f${frameDisplayIdx}`;
+        templateStateEl.textContent = `(${templateCenter.x.toFixed(2)}, ${templateCenter.y.toFixed(2)}, ${templateCenter.z.toFixed(2)})`;
+
+        const scorePct = Math.round(score01 * 100);
+        templateScoreFillEl.style.width = `${scorePct}%`;
+        templateScoreTextEl.textContent = `${scorePct}%`;
+      }
+
+      // ---------- Boxes ----------
+      const lineMats = [];
+
+      function makeLabel(text) {
+        const div = document.createElement("div");
+        div.className = "box-label";
+        div.textContent = text;
+        return { div, obj: new CSS2DObject(div) };
+      }
+
+      const boxGeom = new THREE.BoxGeometry(1, 1, 1);
+      const boxEdgeGeom = new THREE.EdgesGeometry(boxGeom);
+      const boxSegGeom = new LineSegmentsGeometry();
+      boxSegGeom.setPositions(Array.from(boxEdgeGeom.attributes.position.array));
+
+      function createBoxVisual(colorHex, fillOpacity = 0.1, wireOpacity = 0.72, options = {}) {
+        const withLeader = options.withLeader === true;
+        const leaderCorner = options.leaderCorner ? options.leaderCorner.clone() : new THREE.Vector3(0.52, 0.52, 0.52);
+        const leaderOffset = options.leaderOffset ? options.leaderOffset.clone() : new THREE.Vector3(1.05, 0.75, 0.3);
+
+        const g = new THREE.Group();
+        const fillMat = new THREE.MeshStandardMaterial({
+          color: colorHex,
+          emissive: colorHex,
+          emissiveIntensity: 0.15,
+          transparent: true,
+          opacity: fillOpacity,
+          depthWrite: false,
+          roughness: 0.32,
+          metalness: 0.05
+        });
+        const fill = new THREE.Mesh(boxGeom, fillMat);
+
+        const wireMat = new LineMaterial({ color: colorHex, transparent: true, opacity: wireOpacity, linewidth: 3.6, worldUnits: false });
+        const wire = new LineSegments2(boxSegGeom, wireMat);
+        const wireOuterMat = new LineMaterial({ color: colorHex, transparent: true, opacity: wireOpacity * 0.55, linewidth: 5.2, worldUnits: false });
+        const wireOuter = new LineSegments2(boxSegGeom, wireOuterMat);
+        wireOuter.scale.setScalar(1.01);
+
+        wireMat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+        wireOuterMat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+        lineMats.push(wireMat, wireOuterMat);
+
+        g.add(fill, wire, wireOuter);
+
+        const anchor = new THREE.Object3D();
+        g.add(anchor);
+        const lbl = makeLabel("");
+        anchor.add(lbl.obj);
+
+        let leader = null;
+        let leaderMat = null;
+        if (withLeader) {
+          const leaderGeom = new LineGeometry();
+          leaderGeom.setPositions([0, 0, 0, 0, 0, 0]);
+          leaderMat = new LineMaterial({ color: colorHex, transparent: true, opacity: 0, linewidth: 2.2, worldUnits: false });
+          leaderMat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+          lineMats.push(leaderMat);
+          leader = new Line2(leaderGeom, leaderMat);
+          leader.renderOrder = 997;
+          g.add(leader);
+        }
+
+        scene.add(g);
+        return { group: g, fillMat, wireMat, wireOuterMat, anchor, labelDiv: lbl.div, withLeader, leader, leaderMat, leaderCorner, leaderOffset };
+      }
+
+      function applyBox(visual, center, size, yaw = 0) {
+        visual.group.position.copy(center);
+        visual.group.scale.set(size.x, size.y, size.z);
+        visual.group.rotation.y = yaw;
+        if (visual.withLeader) {
+          const c = visual.leaderCorner;
+          const l = new THREE.Vector3(
+            c.x + visual.leaderOffset.x / Math.max(size.x, 0.1),
+            c.y + visual.leaderOffset.y / Math.max(size.y, 0.1),
+            c.z + visual.leaderOffset.z / Math.max(size.z, 0.1)
+          );
+          visual.anchor.position.copy(l);
+          visual.leader.geometry.setPositions([c.x, c.y, c.z, l.x, l.y, l.z]);
+        } else {
+          visual.anchor.position.set(0, 0.78, 0);
+        }
+      }
+
+      function setBoxVisual(visual, color, fillOpacity, wireOpacity, labelText, labelOpacity) {
+        visual.fillMat.color.copy(color);
+        visual.fillMat.emissive.copy(color);
+        visual.wireMat.color.copy(color);
+        visual.wireOuterMat.color.copy(color);
+        visual.fillMat.opacity = fillOpacity;
+        visual.wireMat.opacity = wireOpacity;
+        visual.wireOuterMat.opacity = wireOpacity * 0.55;
+        visual.labelDiv.textContent = labelText;
+        const lo = clamp(labelOpacity, 0, 1);
+        visual.labelDiv.style.opacity = String(lo);
+        if (visual.leaderMat) {
+          visual.leaderMat.color.copy(color);
+          visual.leaderMat.opacity = lo * 0.9;
+          visual.leader.visible = visual.leaderMat.opacity > 0.01;
+        }
+      }
+
+      function hideBox(visual) {
+        visual.group.visible = false;
+        visual.labelDiv.style.opacity = "0";
+        if (visual.leaderMat) {
+          visual.leaderMat.opacity = 0;
+          visual.leader.visible = false;
+        }
+      }
+
+      const DET_SIZE = new THREE.Vector3(4.6, 1.7, 2.0);
+      const OBS_SIZE = new THREE.Vector3(4.2, 1.65, 1.95);
+
+      const postPrevBox = createBoxVisual(0x00c96d, 0.11, 0.9, {
+        withLeader: true,
+        leaderCorner: new THREE.Vector3(0.52, 0.52, 0.52),
+        leaderOffset: new THREE.Vector3(1.05, 0.75, 0.3)
+      });
+      const postCurrBox = createBoxVisual(0x00c96d, 0.09, 0.82, {
+        withLeader: true,
+        leaderCorner: new THREE.Vector3(-0.52, 0.52, 0.52),
+        leaderOffset: new THREE.Vector3(-1.0, 0.75, 0.28)
+      });
+      const predBox = createBoxVisual(0xff3b30, 0.05, 0.8, {
+        withLeader: true,
+        leaderCorner: new THREE.Vector3(0.52, 0.52, -0.52),
+        leaderOffset: new THREE.Vector3(1.02, 0.72, -0.28)
+      });
+
+      const obsLeaderCfg = [
+        { c: new THREE.Vector3(-0.52, 0.52, -0.52), o: new THREE.Vector3(-0.95, 0.68, -0.3) },
+        { c: new THREE.Vector3(0.52, 0.52, 0.52), o: new THREE.Vector3(0.95, 0.68, 0.3) },
+        { c: new THREE.Vector3(-0.52, 0.52, 0.52), o: new THREE.Vector3(-0.9, 0.72, 0.35) },
+        { c: new THREE.Vector3(0.52, 0.52, -0.52), o: new THREE.Vector3(0.92, 0.72, -0.35) },
+        { c: new THREE.Vector3(0, 0.52, 0.52), o: new THREE.Vector3(0, 0.82, 0.4) }
+      ];
+
+      const obsBoxes = Array.from({ length: OBS_BOX_COUNT }, (_, i) =>
+        createBoxVisual(0xff9f1a, 0.06, 0.72, {
+          withLeader: true,
+          leaderCorner: obsLeaderCfg[i % obsLeaderCfg.length].c,
+          leaderOffset: obsLeaderCfg[i % obsLeaderCfg.length].o
+        })
+      );
+
+      function createMatchLinkVisual(colorHex = 0x7c96b8) {
+        const g = new LineGeometry();
+        g.setPositions([0, 0, 0, 0, 0, 0]);
+        const m = new LineMaterial({ color: colorHex, transparent: true, opacity: 0, linewidth: 2.8, worldUnits: false });
+        m.resolution.set(renderer.domElement.width, renderer.domElement.height);
+        lineMats.push(m);
+        const l = new Line2(g, m);
+        l.renderOrder = 995;
+        l.visible = false;
+        scene.add(l);
+        return { line: l, mat: m };
+      }
+
+      function setMatchLink(link, from, to, color, opacity) {
+        const op = clamp(opacity, 0, 1);
+        if (op <= 0.01) {
+          link.line.visible = false;
+          link.mat.opacity = 0;
+          return;
+        }
+        link.line.visible = true;
+        link.mat.color.copy(color);
+        link.mat.opacity = op;
+        link.line.geometry.setPositions([from.x, from.y, from.z, to.x, to.y, to.z]);
+      }
+
+      const matchLinks = Array.from({ length: OBS_BOX_COUNT }, () => createMatchLinkVisual());
+
+      // ---------- Trajectory Segments (straight lines, accumulated) ----------
+      const trajRodGroup = new THREE.Group();
+      scene.add(trajRodGroup);
+      const trajRodGeom = new THREE.CylinderGeometry(0.065, 0.065, 1, 10);
+      const trajRodMat = new THREE.MeshBasicMaterial({ color: 0x00b86a, transparent: true, opacity: 0, depthTest: false });
+      const trajUp = new THREE.Vector3(0, 1, 0);
+      const trajA = new THREE.Vector3();
+      const trajB = new THREE.Vector3();
+      const trajDir = new THREE.Vector3();
+      const trajMid = new THREE.Vector3();
+
+      function setTrajectorySegments(segments, opacity) {
+        const op = clamp(opacity, 0, 1);
+        if (!segments || segments.length < 1 || op <= 0.01) {
+          trajRodGroup.visible = false;
+          trajRodMat.opacity = 0;
+          return;
+        }
+
+        while (trajRodGroup.children.length < segments.length) {
+          const rod = new THREE.Mesh(trajRodGeom, trajRodMat);
+          rod.frustumCulled = false;
+          rod.renderOrder = 996;
+          trajRodGroup.add(rod);
+        }
+        while (trajRodGroup.children.length > segments.length) {
+          const last = trajRodGroup.children[trajRodGroup.children.length - 1];
+          trajRodGroup.remove(last);
+        }
+
+        trajRodMat.opacity = op;
+        trajRodGroup.visible = true;
+
+        for (let i = 0; i < segments.length; i += 1) {
+          const seg = segments[i];
+          const rod = trajRodGroup.children[i];
+          trajA.set(seg[0].x, 0.04, seg[0].z);
+          trajB.set(seg[1].x, 0.04, seg[1].z);
+          trajDir.subVectors(trajB, trajA);
+          const len = trajDir.length();
+          if (len < 1e-5) {
+            rod.visible = false;
+            continue;
+          }
+          rod.visible = true;
+          trajMid.copy(trajA).add(trajB).multiplyScalar(0.5);
+          rod.position.copy(trajMid);
+          rod.scale.set(1, len, 1);
+          rod.quaternion.setFromUnitVectors(trajUp, trajDir.normalize());
+        }
+      }
+
+      // ---------- Playback ----------
+      let playhead = 0;
+      let isPlaying = true;
+      let speed = 1;
+      let lastT = performance.now();
+
+      function setPlayhead(t) {
+        playhead = clamp(t, 0, totalDuration);
+        scrub.value = String(Math.round((playhead / totalDuration) * 1000));
+      }
+
+      function setPlaying(v) {
+        isPlaying = v;
+        playPauseBtn.textContent = isPlaying ? "Pause" : "Play";
+      }
+
+      function setSpeed(v) {
+        speed = v;
+        speedButtons.forEach((b) => b.classList.toggle("active", Number(b.dataset.speed) === v));
+      }
+
+      playPauseBtn.addEventListener("click", () => setPlaying(!isPlaying));
+      prevStepBtn.addEventListener("click", () => {
+        const idx = stepIndexAt(playhead);
+        const local = stepProgress(idx, playhead);
+        jumpToStep(local > 0.12 ? idx : idx - 1);
+        setPlaying(false);
+      });
+      nextStepBtn.addEventListener("click", () => {
+        jumpToStep(stepIndexAt(playhead) + 1);
+        setPlaying(false);
+      });
+      scrub.addEventListener("input", (e) => setPlayhead((Number(e.target.value) / 1000) * totalDuration));
+      speedButtons.forEach((b) => b.addEventListener("click", () => setSpeed(Number(b.dataset.speed))));
+      resetViewBtn.addEventListener("click", () => {
+        camera.position.copy(cameraInitPos);
+        controls.target.copy(targetInit);
+        controls.update();
+      });
+
+      function updateLineRes() {
+        for (const m of lineMats) {
+          m.resolution.set(renderer.domElement.width, renderer.domElement.height);
+        }
+      }
+
+      window.addEventListener("resize", () => {
+        camera.aspect = viewport.clientWidth / viewport.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        labelRenderer.setSize(viewport.clientWidth, viewport.clientHeight);
+
+        const tw = Math.max(1, template3DRoot.clientWidth);
+        const th = Math.max(1, template3DRoot.clientHeight);
+        templateMiniCamera.aspect = tw / th;
+        templateMiniCamera.updateProjectionMatrix();
+        templateMiniRenderer.setSize(tw, th);
+        templateMiniRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        updateLineRes();
+      });
+
+      const cObs = new THREE.Color(0xff9f1a);
+      const cPred = new THREE.Color(0xff3b30);
+      const cPost = new THREE.Color(0x00c96d);
+      const cMatchWeak = new THREE.Color(0x8aa4c8);
+      const cTmp = new THREE.Color();
+      const matchFrom = new THREE.Vector3();
+      const matchTo = new THREE.Vector3();
+
+      function updateTimeline(stepIdx) {
+        statusPill.textContent = `Step ${STEP_DISPLAY_NUMS[stepIdx]} / ${TOTAL_DISPLAY_STEPS} · ${STEPS[stepIdx].title}`;
+        stepCards.forEach((c, i) => {
+          c.classList.toggle("active", i === stepIdx);
+          c.classList.toggle("done", i < stepIdx);
+        });
+        stageMiniNodes.forEach((n, i) => {
+          n.classList.toggle("active", i === stepIdx);
+          n.classList.toggle("done", i < stepIdx);
+        });
+      }
+
+      function updateScene(timeSec) {
+        const stepIdx = stepIndexAt(timeSec);
+        updateTimeline(stepIdx);
+
+        const p = STEPS.map((_, i) => stepProgress(i, timeSec));
+        let framePrev = STATIC_PREV_FRAME;
+        let frameCurr = STATIC_CURR_FRAME;
+        let loopPhase = 1;
+        let loopCycleIndex = 0;
+        let templateFrameDisplay = 1;
+        let obsFrameDisplay = 2;
+
+        if (stepIdx === 3) {
+          const cycleRaw = Math.min(LOOP_CYCLES - 1e-6, p[3] * LOOP_CYCLES);
+          loopCycleIndex = Math.floor(cycleRaw);
+          loopPhase = cycleRaw - loopCycleIndex;
+
+          framePrev = clamp(STATIC_CURR_FRAME + loopCycleIndex * LOOP_STRIDE, 0, TOTAL_FRAMES - 2);
+          frameCurr = clamp(framePrev + LOOP_STRIDE, framePrev + 1, TOTAL_FRAMES - 1);
+
+          templateFrameDisplay = 2 + loopCycleIndex;
+          obsFrameDisplay = templateFrameDisplay + 1;
+        }
+
+        if (stepIdx === 0) {
+          templateFrameDisplay = 1;
+          obsFrameDisplay = 1;
+        } else if (stepIdx < 3) {
+          templateFrameDisplay = 1;
+          obsFrameDisplay = 2;
+        }
+
+        const prevPosterior = trackUpdate[framePrev].clone();
+        const currPosterior = trackUpdate[frameCurr].clone();
+
+        const obsSet = obsCandidates[frameCurr].map((v) => v.clone());
+        const matchSet = templateMatchScores[frameCurr];
+        let matchedIdx = 0;
+        for (let i = 1; i < OBS_BOX_COUNT; i += 1) {
+          if (matchSet[i] > matchSet[matchedIdx]) matchedIdx = i;
+        }
+        // Force the best candidate to be the t-frame target location so the posterior clearly moves onto it.
+        obsSet[matchedIdx].copy(currPosterior);
+
+        let cloudCenter = prevPosterior.clone();
+
+        let prevPos = prevPosterior.clone();
+        let prevAlpha = 0;
+        let obsBase = 0;
+        let unmatchedFade = 0;
+        let matchedFade = 0;
+        let matchedBlink = 0;
+        let showObs = false;
+        let trajOpacity = 0;
+        let trajSegments = [];
+        let matchLineBase = 0;
+        let matchHighlight = 0;
+
+        if (stepIdx === 0) {
+          prevAlpha = smooth(p[0]);
+          cloudCenter = prevPosterior;
+        } else if (stepIdx === 1) {
+          prevAlpha = 1;
+          showObs = true;
+          obsBase = smooth(p[1]);
+          cloudCenter = prevPosterior;
+        } else if (stepIdx === 2) {
+          const u = p[2];
+          const matchIn = smooth(clamp((u - 0.08) / 0.2, 0, 1));
+          const fadeOthers = smooth(clamp((u - 0.3) / 0.18, 0, 1));
+          const move = smooth(clamp((u - 0.46) / 0.42, 0, 1));
+          const matchedOut = smooth(clamp((u - 0.74) / 0.2, 0, 1));
+
+          prevPos = prevPosterior.clone().lerp(currPosterior, move);
+          prevAlpha = 1;
+          showObs = true;
+          obsBase = 1;
+          unmatchedFade = fadeOthers;
+          matchedFade = matchedOut;
+          matchedBlink = matchIn * (1 - matchedOut);
+          matchLineBase = matchIn * (1 - 0.72 * matchedOut);
+          matchHighlight = matchIn;
+          cloudCenter = prevPos;
+
+          trajSegments = [[prevPosterior, prevPos]];
+          trajOpacity = 0.96;
+        } else {
+          const u = loopPhase;
+          const candIn = smooth(clamp((u - 0.02) / 0.18, 0, 1));
+          const matchIn = smooth(clamp((u - 0.23) / 0.16, 0, 1));
+          const fadeOthers = smooth(clamp((u - 0.38) / 0.16, 0, 1));
+          const move = smooth(clamp((u - 0.53) / 0.35, 0, 1));
+          const matchedOut = smooth(clamp((u - 0.74) / 0.2, 0, 1));
+
+          prevPos = prevPosterior.clone().lerp(currPosterior, move);
+          prevAlpha = 1;
+          showObs = true;
+          obsBase = candIn;
+          unmatchedFade = fadeOthers;
+          matchedFade = matchedOut;
+          matchedBlink = matchIn * (1 - matchedOut);
+          matchLineBase = matchIn * (1 - 0.78 * matchedOut);
+          matchHighlight = matchIn;
+          cloudCenter = prevPos;
+
+          trajSegments.push([trackUpdate[STATIC_PREV_FRAME], trackUpdate[STATIC_CURR_FRAME]]);
+          for (let c = 0; c < loopCycleIndex; c += 1) {
+            const segPrev = clamp(STATIC_CURR_FRAME + c * LOOP_STRIDE, 0, TOTAL_FRAMES - 2);
+            const segCurr = clamp(segPrev + LOOP_STRIDE, segPrev + 1, TOTAL_FRAMES - 1);
+            trajSegments.push([trackUpdate[segPrev], trackUpdate[segCurr]]);
+          }
+          trajSegments.push([prevPosterior, prevPos]);
+          trajOpacity = 0.96;
+        }
+
+        updatePointCloud(cloudCenter);
+
+        applyBox(postPrevBox, prevPos, DET_SIZE, 0.08);
+        applyBox(postCurrBox, currPosterior, DET_SIZE, 0.08);
+        applyBox(predBox, currPosterior, DET_SIZE, 0.08);
+
+        const speedNow = 2.65 + 0.75 * Math.sin((frameCurr + loopPhase) * 0.085);
+        const prevLabel = stepIdx === 0 ? "x_(t-1) posterior" : `Track #${TRACK_ID} | ${speedNow.toFixed(2)} m/s`;
+
+        setBoxVisual(postPrevBox, cPost, 0.12 * prevAlpha, 0.95 * prevAlpha, prevLabel, 0.95 * prevAlpha);
+        postPrevBox.group.visible = prevAlpha > 0.01;
+
+        hideBox(postCurrBox);
+        hideBox(predBox);
+
+        if (!showObs) {
+          for (const b of obsBoxes) hideBox(b);
+        } else {
+          const blink = 0.74 + 0.26 * Math.abs(Math.sin(timeSec * 14.0));
+          for (let i = 0; i < obsBoxes.length; i += 1) {
+            const b = obsBoxes[i];
+            const isMatched = i === matchedIdx;
+            applyBox(b, obsSet[i], OBS_SIZE, 0.05);
+
+            let a;
+            if (isMatched) {
+              a = obsBase * (1 - 0.92 * matchedFade);
+            } else {
+              a = obsBase * (1 - 0.92 * unmatchedFade) * (1 - 0.72 * matchedFade);
+            }
+            a = clamp(a, 0, 1);
+
+            const hitMix = isMatched ? clamp(0.15 + 0.85 * matchHighlight * blink, 0, 1) : 0;
+            const obsColor = isMatched ? cTmp.copy(cObs).lerp(cPred, hitMix) : cObs;
+            const sim = matchSet[i];
+            const label = isMatched
+              ? `z_t* sim ${sim.toFixed(2)} | f${obsFrameDisplay}`
+              : `z_t^${i + 1} sim ${sim.toFixed(2)} | f${obsFrameDisplay}`;
+            const lo = (isMatched ? 0.92 : 0.62 * (1 - 0.75 * unmatchedFade)) * a;
+            setBoxVisual(b, obsColor, 0.08 * a, 0.82 * a, label, lo);
+            b.group.visible = a > 0.01;
+          }
+        }
+
+        if (!showObs || matchLineBase <= 0.01 || stepIdx === 1) {
+          for (const link of matchLinks) {
+            link.line.visible = false;
+            link.mat.opacity = 0;
+          }
+        } else {
+          const blink = 0.74 + 0.26 * Math.abs(Math.sin(timeSec * 14.0));
+          matchFrom.set(prevPosterior.x, prevPosterior.y + DET_SIZE.y * 0.55, prevPosterior.z);
+          for (let i = 0; i < OBS_BOX_COUNT; i += 1) {
+            const isMatched = i === matchedIdx;
+            matchTo.set(obsSet[i].x, obsSet[i].y + OBS_SIZE.y * 0.55, obsSet[i].z);
+            let a;
+            if (isMatched) {
+              a = matchLineBase * (0.74 + 0.26 * blink) * (1 - 0.9 * matchedFade);
+            } else {
+              a = matchLineBase * (1 - 0.94 * unmatchedFade) * (1 - 0.72 * matchedFade);
+            }
+            const c = isMatched ? cPred : cMatchWeak;
+            setMatchLink(matchLinks[i], matchFrom, matchTo, c, a);
+          }
+        }
+
+        setTrajectorySegments(trajSegments, trajOpacity);
+        drawTemplatePreview(prevPosterior, templateFrameDisplay, matchSet[matchedIdx], timeSec);
+      }
+
+      function tick(now) {
+        const dt = (now - lastT) / 1000;
+        lastT = now;
+
+        if (isPlaying) {
+          const next = playhead + dt * speed;
+          if (next >= totalDuration) {
+            setPlayhead(totalDuration);
+            setPlaying(false);
+          } else {
+            setPlayhead(next);
+          }
+        }
+
+        updateScene(playhead);
+        controls.update();
+        renderer.render(scene, camera);
+        templateMiniRenderer.render(templateMiniScene, templateMiniCamera);
+        labelRenderer.render(scene, camera);
+        requestAnimationFrame(tick);
+      }
+
+      updateLineRes();
+      setPlayhead(0);
+      setSpeed(1);
+      setPlaying(true);
+      requestAnimationFrame(tick);
+    </script>
+  </body>
+</html>

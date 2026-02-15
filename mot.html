@@ -1,0 +1,1539 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D MOT Pipeline Demo</title>
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --line: rgba(148, 163, 184, 0.22);
+        --text: #0f172a;
+        --text-dim: #64748b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      #app {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      #top-header {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      #top-title h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 650;
+        color: #0f172a;
+      }
+
+      #top-title p {
+        margin: 5px 0 0;
+        font-size: 12px;
+        color: #64748b;
+      }
+
+      #header-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .pill {
+        height: 34px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.34);
+        background: rgba(248, 250, 252, 0.94);
+        color: #334155;
+        padding: 0 11px;
+        display: inline-flex;
+        align-items: center;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      button {
+        border: 1px solid rgba(148, 163, 184, 0.34);
+        height: 34px;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #1e293b;
+        padding: 0 11px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s ease, border-color 0.2s ease;
+      }
+
+      button:hover {
+        border-color: rgba(59, 130, 246, 0.45);
+        background: #f8fbff;
+      }
+
+      button.primary {
+        background: #0f172a;
+        color: #ffffff;
+        border-color: #0f172a;
+      }
+
+      button.primary:hover {
+        background: #1e293b;
+      }
+
+      button.warn {
+        background: #fef3c7;
+        border-color: #fcd34d;
+        color: #92400e;
+      }
+
+      #content {
+        min-height: 0;
+        flex: 1;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 10px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+        gap: 10px;
+      }
+
+      #viewport-panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #ffffff;
+        position: relative;
+        overflow: hidden;
+        min-height: 0;
+      }
+
+      #three-root {
+        position: absolute;
+        inset: 0;
+      }
+
+      #legend-panel {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.34);
+        background: rgba(255, 255, 255, 0.74);
+        backdrop-filter: blur(4px);
+        padding: 8px;
+        display: grid;
+        gap: 5px;
+        pointer-events: none;
+        font-size: 11px;
+        color: #334155;
+      }
+
+      .legend-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+      }
+
+      #stage-strip {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        top: 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        overflow-x: auto;
+        pointer-events: none;
+      }
+
+      .mini-step {
+        flex: 0 0 auto;
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.34);
+        background: rgba(255, 255, 255, 0.76);
+        color: #64748b;
+        font-size: 11px;
+        padding: 5px 8px;
+        white-space: nowrap;
+      }
+
+      .mini-step.active {
+        background: rgba(220, 252, 231, 0.9);
+        border-color: rgba(16, 185, 129, 0.45);
+        color: #047857;
+        font-weight: 600;
+      }
+
+      .mini-step.done {
+        background: rgba(248, 250, 252, 0.88);
+        color: #475569;
+      }
+
+      #stage-desc {
+        position: absolute;
+        left: 10px;
+        top: 44px;
+        max-width: 420px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.32);
+        background: rgba(255, 255, 255, 0.74);
+        backdrop-filter: blur(4px);
+        padding: 8px 10px;
+        pointer-events: none;
+      }
+
+      #stage-desc h3 {
+        margin: 0;
+        font-size: 13px;
+        color: #0f172a;
+      }
+
+      #stage-desc p {
+        margin: 5px 0 0;
+        font-size: 12px;
+        color: #64748b;
+        line-height: 1.4;
+      }
+
+      #dashboard-panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #ffffff;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        min-height: 0;
+      }
+
+      #dashboard-panel h2 {
+        margin: 2px 2px 0;
+        font-size: 13px;
+        color: #334155;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      .card {
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 10px;
+        background: #ffffff;
+        padding: 8px;
+      }
+
+      .card h3 {
+        margin: 0 0 7px;
+        font-size: 12px;
+        color: #334155;
+      }
+
+      #cost-matrix-wrap {
+        min-height: 180px;
+        max-height: 285px;
+        overflow: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+
+      th,
+      td {
+        border: 1px solid rgba(148, 163, 184, 0.27);
+        padding: 4px;
+        text-align: center;
+        color: #475569;
+      }
+
+      th {
+        background: #f8fafc;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+
+      td.hit {
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-weight: 600;
+      }
+
+      #log-list {
+        min-height: 160px;
+        max-height: 240px;
+        overflow: auto;
+        display: grid;
+        gap: 6px;
+      }
+
+      .log-item {
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 8px;
+        background: rgba(248, 250, 252, 0.88);
+        padding: 6px 7px;
+        font-size: 11px;
+        color: #475569;
+        line-height: 1.35;
+      }
+
+      .box-label {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.45);
+        background: rgba(15, 23, 42, 0.72);
+        color: #ffffff;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+
+      @media (max-width: 1280px) {
+        #content {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(360px, 1fr) 320px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header id="top-header">
+        <div id="top-title">
+          <h1>3D Multi-Object Tracking (3D MOT) - Pipeline Demo</h1>
+          <p>Point Cloud + 3D Boxes · Kalman Prior · Detection Association · Update · Track Birth/Death</p>
+        </div>
+
+        <div id="header-controls">
+          <span class="pill" id="frame-pill">Frame 1</span>
+          <span class="pill" id="step-pill">Step 1 / 5</span>
+          <button class="primary" id="next-btn">Next Step</button>
+          <button class="warn" id="auto-btn">Auto Play</button>
+          <button id="reset-btn">Reset</button>
+        </div>
+      </header>
+
+      <section id="content">
+        <div id="viewport-panel">
+          <div id="three-root"></div>
+          <div id="stage-strip"></div>
+          <div id="stage-desc">
+            <h3></h3>
+            <p></p>
+          </div>
+          <div id="legend-panel"></div>
+        </div>
+
+        <aside id="dashboard-panel">
+          <h2>Algorithm Dashboard</h2>
+
+          <div class="card">
+            <h3>Cost Matrix (Track Prior vs Detection)</h3>
+            <div id="cost-matrix-wrap"></div>
+          </div>
+
+          <div class="card" style="flex:1;min-height:0;">
+            <h3>Runtime Log</h3>
+            <div id="log-list"></div>
+          </div>
+        </aside>
+      </section>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+      import { Line2 } from "three/addons/lines/Line2.js";
+      import { LineGeometry } from "three/addons/lines/LineGeometry.js";
+      import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+      import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+      import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+
+      const STEPS = [
+        {
+          title: "Step 1: Kalman Prediction",
+          desc: "根据 t-1 帧的跟踪后验状态 x_(t-1)，用 Kalman 运动模型外推得到 t 帧初步跟踪结果 x_t^-（红色）。绿色是 t-1 轨迹。"
+        },
+        {
+          title: "Step 2: Detections at t",
+          desc: "检测器在 t 帧输出观测框（橙色），它们可能有噪声、漏检或多余检测。"
+        },
+        {
+          title: "Step 3: Association",
+          desc: "计算 prior 与 detection 的代价矩阵并匹配。蓝线表示关联关系，亮蓝线表示成功匹配。"
+        },
+        {
+          title: "Step 4: Update",
+          desc: "融合 prior 与 detection 得到更新后验（绿色）。本脚本在这一步触发 Birth：将未匹配观测初始化为新轨迹。"
+        },
+        {
+          title: "Step 5: Lifecycle",
+          desc: "执行脚本化生命周期管理：让指定轨迹执行 Death（消失），场景从 3 条轨迹回到 2 条轨迹。"
+        }
+      ];
+
+      const COLORS = {
+        trackPrev: 0x22c55e,
+        prior: 0xf87171,
+        detection: 0xf59e0b,
+        assoc: 0x1d4ed8,
+        update: 0x10b981,
+        birth: 0x38bdf8,
+        lost: 0x94a3b8
+      };
+
+      const WORLD_X = 18;
+      const WORLD_Z = 8.6;
+      const TRACK_SIZE = { x: 4.9, y: 2.05, z: 2.25 };
+      const BOX_WIRE_WIDTH = 3.6;
+      const ASSOC_LINE_WIDTH = 3.0;
+      const TRAIL_LINE_WIDTH = 2.8;
+      const PRIOR_LOOKAHEAD = 1.6;
+      const ASSOC_GATE = 4.2;
+      const SCRIPT_BIRTH_FRAME = 1;
+      const SCRIPT_DEATH_FRAME = 2;
+      const SCRIPT_DEATH_TRACK_ID = 2;
+      const TRACK_MOVE_MS = 760;
+      const TRACK_FADE_MS = 860;
+
+      const framePill = document.getElementById("frame-pill");
+      const stepPill = document.getElementById("step-pill");
+      const nextBtn = document.getElementById("next-btn");
+      const autoBtn = document.getElementById("auto-btn");
+      const resetBtn = document.getElementById("reset-btn");
+      const stageStrip = document.getElementById("stage-strip");
+      const stageTitleEl = document.querySelector("#stage-desc h3");
+      const stageDescEl = document.querySelector("#stage-desc p");
+      const legendPanel = document.getElementById("legend-panel");
+      const matrixWrap = document.getElementById("cost-matrix-wrap");
+      const logList = document.getElementById("log-list");
+      const viewport = document.getElementById("three-root");
+
+      const stageNodes = STEPS.map((s, i) => {
+        const el = document.createElement("div");
+        el.className = "mini-step";
+        el.textContent = `${i + 1}. ${s.title.replace(/^Step\s\d+:\s/, "")}`;
+        stageStrip.appendChild(el);
+        return el;
+      });
+
+      legendPanel.innerHTML = `
+        <div class="legend-row"><span class="legend-swatch" style="background:#f59e0b"></span><span>Detection Boxes at t</span></div>
+        <div class="legend-row"><span class="legend-swatch" style="background:#10b981"></span><span>Tracked Boxes at t</span></div>
+        <div class="legend-row"><span class="legend-swatch" style="background:#22c55e"></span><span>Tracked Boxes at t-1</span></div>
+        <div class="legend-row"><span class="legend-swatch" style="background:#f87171"></span><span>Kalman Prior at t</span></div>
+      `;
+
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const clamp01 = (v) => Math.max(0, Math.min(1, v));
+      const normAngle = (a) => {
+        const t = Math.PI * 2;
+        let x = a;
+        while (x > Math.PI) x -= t;
+        while (x < -Math.PI) x += t;
+        return x;
+      };
+      const lerpAngle = (a, b, t) => a + normAngle(b - a) * t;
+
+      function distXZ(a, b) {
+        const dx = a.x - b.x;
+        const dz = a.z - b.z;
+        return Math.sqrt(dx * dx + dz * dz);
+      }
+
+      function makeTrack(id, x, z, vx, vz, status = "normal") {
+        return {
+          id,
+          x,
+          z,
+          vx,
+          vz,
+          yaw: Math.atan2(vz, vx),
+          miss: 0,
+          status,
+          history: [{ x, z }]
+        };
+      }
+
+      function buildScriptedDetections() {
+        const dets = [];
+        const pushDet = (x, z, yaw) => {
+          dets.push({ id: `D${dets.length + 1}`, x, z, yaw });
+        };
+
+        const priorById = new Map(state.priors.map((p) => [p.trackId, p]));
+        const p1 = priorById.get(1);
+        const p2 = priorById.get(2);
+        const p3 = priorById.get(3);
+
+        if (p1) pushDet(p1.x + 0.82, p1.z + 0.28, p1.yaw + 0.03);
+
+        if (!(state.frame === SCRIPT_DEATH_FRAME && !state.script.deathDone) && p2) {
+          pushDet(p2.x + 0.66, p2.z - 0.24, p2.yaw - 0.02);
+        }
+
+        if (p3) pushDet(p3.x + 0.64, p3.z + 0.2, p3.yaw + 0.02);
+
+        if (state.frame === SCRIPT_BIRTH_FRAME && !state.script.birthDone) {
+          const seed = p2 || p1 || { x: -3.6, z: 0.9, yaw: 0 };
+          pushDet(seed.x + 4.2, seed.z - 2.2, seed.yaw + 0.08);
+        }
+
+        return dets;
+      }
+
+      function computeAssociations(priors, detections) {
+        const matrix = priors.map((p) => detections.map((d) => distXZ(p, d)));
+        const pairs = [];
+        for (let i = 0; i < priors.length; i += 1) {
+          for (let j = 0; j < detections.length; j += 1) {
+            pairs.push({ i, j, cost: matrix[i][j] });
+          }
+        }
+        pairs.sort((a, b) => a.cost - b.cost);
+
+        const usedT = new Set();
+        const usedD = new Set();
+        const matches = [];
+        const gate = ASSOC_GATE;
+
+        for (const p of pairs) {
+          if (p.cost > gate) continue;
+          if (usedT.has(p.i) || usedD.has(p.j)) continue;
+          usedT.add(p.i);
+          usedD.add(p.j);
+          matches.push({ trackIdx: p.i, detIdx: p.j, cost: p.cost });
+        }
+
+        const unmatchedTrackIdx = [];
+        for (let i = 0; i < priors.length; i += 1) if (!usedT.has(i)) unmatchedTrackIdx.push(i);
+        const unmatchedDetIdx = [];
+        for (let j = 0; j < detections.length; j += 1) if (!usedD.has(j)) unmatchedDetIdx.push(j);
+
+        return { matrix, matches, unmatchedTrackIdx, unmatchedDetIdx };
+      }
+
+      // ---------- Scene Setup ----------
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color("#ffffff");
+      scene.fog = new THREE.Fog("#edf3fb", 40, 86);
+
+      const camera = new THREE.PerspectiveCamera(48, viewport.clientWidth / viewport.clientHeight, 0.1, 220);
+      camera.position.set(25, 17, 21);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.02;
+      viewport.appendChild(renderer.domElement);
+
+      const labelRenderer = new CSS2DRenderer();
+      labelRenderer.setSize(viewport.clientWidth, viewport.clientHeight);
+      labelRenderer.domElement.style.position = "absolute";
+      labelRenderer.domElement.style.inset = "0";
+      labelRenderer.domElement.style.pointerEvents = "none";
+      viewport.appendChild(labelRenderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.enablePan = true;
+      controls.target.set(0, TRACK_SIZE.y * 0.55, 0);
+      controls.minDistance = 8;
+      controls.maxDistance = 52;
+      controls.maxPolarAngle = Math.PI * 0.495;
+
+      const hemi = new THREE.HemisphereLight(0xd3e7ff, 0xf5f8fc, 0.9);
+      scene.add(hemi);
+      const key = new THREE.DirectionalLight(0xc5deff, 0.82);
+      key.position.set(16, 28, 11);
+      scene.add(key);
+
+      const ground = new THREE.GridHelper(44, 22, 0xd0e1f7, 0xebf1f8);
+      ground.position.y = 0.01;
+      scene.add(ground);
+
+      const pointGeom = new THREE.BufferGeometry();
+      const pointMat = new THREE.PointsMaterial({
+        color: 0x111827,
+        size: 0.12,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false
+      });
+      const pointCloud = new THREE.Points(pointGeom, pointMat);
+      scene.add(pointCloud);
+
+      const groupTracks = new THREE.Group();
+      const groupPriors = new THREE.Group();
+      const groupDets = new THREE.Group();
+      const groupAssoc = new THREE.Group();
+      scene.add(groupTracks, groupPriors, groupDets, groupAssoc);
+
+      const boxUnitGeom = new THREE.BoxGeometry(1, 1, 1);
+      const edgeUnitGeom = new THREE.EdgesGeometry(boxUnitGeom);
+      const edgeWideGeom = new LineSegmentsGeometry();
+      edgeWideGeom.setPositions(Array.from(edgeUnitGeom.attributes.position.array));
+      const wideLineMats = [];
+
+      function makeLabel(text) {
+        const div = document.createElement("div");
+        div.className = "box-label";
+        div.textContent = text;
+        return new CSS2DObject(div);
+      }
+
+      function disposeObject(obj) {
+        if (!obj) return;
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m && m.dispose && m.dispose());
+          } else {
+            obj.material.dispose && obj.material.dispose();
+          }
+        }
+        if (obj.children) {
+          for (const c of obj.children) disposeObject(c);
+        }
+      }
+
+      function clearGroup(group) {
+        for (let i = group.children.length - 1; i >= 0; i -= 1) {
+          const c = group.children[i];
+          c.traverse((node) => {
+            if (node.isCSS2DObject && node.element && node.element.parentNode) {
+              node.element.parentNode.removeChild(node.element);
+            }
+          });
+          group.remove(c);
+          disposeObject(c);
+        }
+      }
+
+      function addBox(group, cfg) {
+        const {
+          x,
+          z,
+          y = TRACK_SIZE.y / 2,
+          sizeX = TRACK_SIZE.x,
+          sizeY = TRACK_SIZE.y,
+          sizeZ = TRACK_SIZE.z,
+          yaw = 0,
+          color,
+          wireOpacity = 0.86,
+          wireWidth = BOX_WIRE_WIDTH,
+          fillOpacity = 0.06,
+          dashed = false,
+          label,
+          labelLeader = true,
+          labelOffset = null,
+          labelCorner = null
+        } = cfg;
+
+        const g = new THREE.Group();
+        g.position.set(x, y, z);
+        g.rotation.y = yaw;
+
+        const body = new THREE.Group();
+        body.scale.set(sizeX, sizeY, sizeZ);
+        g.add(body);
+
+        const fill = new THREE.Mesh(
+          boxUnitGeom,
+          new THREE.MeshStandardMaterial({
+            color,
+            emissive: color,
+            emissiveIntensity: 0.15,
+            transparent: true,
+            opacity: fillOpacity,
+            depthWrite: false,
+            roughness: 0.32,
+            metalness: 0.04
+          })
+        );
+
+        let edge;
+        if (dashed) {
+          edge = new THREE.LineSegments(
+            edgeUnitGeom,
+            new THREE.LineDashedMaterial({
+              color,
+              dashSize: 0.42,
+              gapSize: 0.26,
+              transparent: true,
+              opacity: wireOpacity
+            })
+          );
+          edge.computeLineDistances();
+        } else {
+          edge = new THREE.LineSegments(
+            edgeUnitGeom,
+            new THREE.LineBasicMaterial({
+              color,
+              transparent: true,
+              opacity: wireOpacity
+            })
+          );
+        }
+
+        body.add(fill, edge);
+
+        if (!dashed && wireWidth > 1) {
+          const mat = new LineMaterial({
+            color,
+            transparent: true,
+            opacity: wireOpacity,
+            linewidth: wireWidth,
+            worldUnits: false
+          });
+          mat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+          wideLineMats.push(mat);
+
+          const wide = new LineSegments2(edgeWideGeom, mat);
+          wide.renderOrder = 3;
+          body.add(wide);
+        }
+
+        if (label) {
+          const extent = new THREE.Vector3(sizeX * 0.5, sizeY * 0.5, sizeZ * 0.5);
+          const normToWorld = (v, e) =>
+            Math.abs(v.x) <= 1.6 && Math.abs(v.y) <= 1.6 && Math.abs(v.z) <= 1.6
+              ? new THREE.Vector3(v.x * e.x, v.y * e.y, v.z * e.z)
+              : v.clone();
+
+          const baseOffset = labelOffset || new THREE.Vector3(0.62, 0.72, 0.0);
+          const lblPos = normToWorld(baseOffset, extent);
+          const lbl = makeLabel(label);
+          const anchor = new THREE.Object3D();
+          anchor.position.copy(lblPos);
+          anchor.add(lbl);
+          g.add(anchor);
+
+          if (labelLeader) {
+            const defaultCornerNorm = new THREE.Vector3(
+              lblPos.x >= 0 ? 1 : -1,
+              1,
+              lblPos.z >= 0 ? 1 : -1
+            );
+            const pickTopCornerNorm = (v) =>
+              new THREE.Vector3(v.x >= 0 ? 1 : -1, 1, v.z >= 0 ? 1 : -1);
+            const cornerNorm = pickTopCornerNorm(labelCorner || defaultCornerNorm);
+            const corner = normToWorld(cornerNorm, extent);
+            const leadGeom = new LineGeometry();
+            leadGeom.setPositions([corner.x, corner.y, corner.z, lblPos.x, lblPos.y, lblPos.z]);
+            const leadMat = new LineMaterial({
+              color,
+              transparent: true,
+              opacity: 0.84,
+              linewidth: wireWidth,
+              worldUnits: false
+            });
+            leadMat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+            wideLineMats.push(leadMat);
+            const leadLine = new Line2(leadGeom, leadMat);
+            leadLine.renderOrder = 4;
+            g.add(leadLine);
+          }
+        }
+
+        group.add(g);
+      }
+
+      function addAssocLine(group, a, b, color, opacity, width = ASSOC_LINE_WIDTH) {
+        const geom = new LineGeometry();
+        geom.setPositions([
+          a.x,
+          TRACK_SIZE.y * 0.72,
+          a.z,
+          b.x,
+          TRACK_SIZE.y * 0.72,
+          b.z
+        ]);
+        const mat = new LineMaterial({
+          color,
+          transparent: true,
+          opacity,
+          linewidth: width,
+          worldUnits: false
+        });
+        mat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+        wideLineMats.push(mat);
+
+        const line = new Line2(geom, mat);
+        line.renderOrder = 3;
+        group.add(line);
+      }
+
+      // ---------- App State ----------
+      const state = {
+        frame: 1,
+        step: 0,
+        auto: false,
+        tracks: [],
+        priors: [],
+        detections: [],
+        costMatrix: [],
+        matches: [],
+        unmatchedTrackIdx: [],
+        unmatchedDetIdx: [],
+        logs: [],
+        nextTrackId: 1,
+        script: {
+          birthDone: false,
+          deathDone: false
+        },
+        animation: {
+          trackMoves: {},
+          fadingTracks: []
+        }
+      };
+
+      function pushTrackMove(trackId, fromPose, toPose, nowMs) {
+        const dx = toPose.x - fromPose.x;
+        const dz = toPose.z - fromPose.z;
+        const dyaw = normAngle(toPose.yaw - fromPose.yaw);
+        if (Math.hypot(dx, dz) < 0.02 && Math.abs(dyaw) < 0.01) {
+          delete state.animation.trackMoves[trackId];
+          return;
+        }
+        state.animation.trackMoves[trackId] = {
+          fromX: fromPose.x,
+          fromZ: fromPose.z,
+          fromYaw: fromPose.yaw,
+          toX: toPose.x,
+          toZ: toPose.z,
+          toYaw: toPose.yaw,
+          start: nowMs,
+          end: nowMs + TRACK_MOVE_MS
+        };
+      }
+
+      function getTrackPoseForRender(track, nowMs) {
+        const mv = state.animation.trackMoves[track.id];
+        if (!mv) return { x: track.x, z: track.z, yaw: track.yaw, moving: false };
+        const span = Math.max(1, mv.end - mv.start);
+        const t = clamp01((nowMs - mv.start) / span);
+        return {
+          x: lerp(mv.fromX, mv.toX, t),
+          z: lerp(mv.fromZ, mv.toZ, t),
+          yaw: lerpAngle(mv.fromYaw, mv.toYaw, t),
+          moving: t < 1
+        };
+      }
+
+      function updateVisualAnimations(nowMs) {
+        let active = false;
+        let changed = false;
+
+        for (const key of Object.keys(state.animation.trackMoves)) {
+          const mv = state.animation.trackMoves[key];
+          if (nowMs >= mv.end) {
+            delete state.animation.trackMoves[key];
+            changed = true;
+          } else {
+            active = true;
+          }
+        }
+
+        const kept = [];
+        for (const f of state.animation.fadingTracks) {
+          if (nowMs < f.end) {
+            kept.push(f);
+            active = true;
+          } else {
+            changed = true;
+          }
+        }
+        if (kept.length !== state.animation.fadingTracks.length) {
+          state.animation.fadingTracks = kept;
+        }
+
+        return { active, changed };
+      }
+
+      function pushLog(line) {
+        state.logs.unshift(line);
+        if (state.logs.length > 16) state.logs.length = 16;
+      }
+
+      function initState() {
+        state.frame = 1;
+        state.step = 0;
+        state.auto = false;
+        state.script = { birthDone: false, deathDone: false };
+        state.animation = { trackMoves: {}, fadingTracks: [] };
+        state.tracks = [
+          makeTrack(1, -9.5, -2.9, 1.04, 0.06, "normal"),
+          makeTrack(2, -9.3, 2.9, 0.98, -0.05, "normal")
+        ];
+        state.nextTrackId = 3;
+        state.detections = [];
+        state.priors = [];
+        state.costMatrix = [];
+        state.matches = [];
+        state.unmatchedTrackIdx = [];
+        state.unmatchedDetIdx = [];
+        state.logs = [];
+        pushLog("System initialized with scripted scenario: 2 -> 3 (birth) -> 2 (death).");
+
+        enterPredictStage(true);
+      }
+
+      function normalizeTrackStatuses() {
+        state.tracks = state.tracks.map((t) => ({
+          ...t,
+          status: t.status === "unmatched" && t.miss > 0 ? "unmatched" : "normal"
+        }));
+      }
+
+      function updatePointCloud() {
+        const pts = [];
+        const TAU = Math.PI * 2;
+        const fract = (v) => v - Math.floor(v);
+        const hash = (a, b) => fract(Math.sin(a * 127.1 + b * 311.7) * 43758.5453123);
+
+        // Ground scan: concentric rings around lidar origin.
+        const maxR = Math.max(WORLD_X, WORLD_Z) * 1.22;
+        const ringStep = 0.46;
+        const maxRings = Math.floor(maxR / ringStep);
+        for (let ri = 2; ri <= maxRings; ri += 1) {
+          const r = ri * ringStep;
+          const angleStep = 0.03 + ri * 0.0005;
+          for (let theta = 0; theta < TAU; theta += angleStep) {
+            if (hash(ri * 0.37, theta * 0.91) < 0.14) continue;
+            const rr = r + (hash(theta * 1.8, ri * 1.3) - 0.5) * 0.1;
+            const tt = theta + (hash(theta * 2.7, ri * 2.1) - 0.5) * 0.02;
+            const x = rr * Math.cos(tt);
+            const z = rr * Math.sin(tt);
+            if (Math.abs(x) > WORLD_X * 1.25 || Math.abs(z) > WORLD_Z * 1.35) continue;
+            const y = 0.008 + 0.006 * (hash(ri * 0.81, theta * 0.43) - 0.5);
+            pts.push(x, y, z);
+          }
+        }
+
+        // Vehicle scan returns: contour-heavy car-like point clouds.
+        const anchors = state.tracks.map((t) => ({ x: t.x, z: t.z, yaw: t.yaw }));
+        if (state.frame === SCRIPT_BIRTH_FRAME && !state.script.birthDone) {
+          anchors.push({ x: -3.2, z: 0.7, yaw: 0.08 });
+        }
+
+        const carL = 4.15;
+        const carW = 1.86;
+        const carH = 1.55;
+
+        for (let ai = 0; ai < anchors.length; ai += 1) {
+          const a = anchors[ai];
+          const seed = ai * 17.31 + state.frame * 0.11;
+          const c = Math.cos(a.yaw);
+          const s = Math.sin(a.yaw);
+          const toWorld = (lx, lz) => ({
+            x: a.x + lx * c - lz * s,
+            z: a.z + lx * s + lz * c
+          });
+          const bodyHalfW = (u) => {
+            const frontTaper = 1 - 0.18 * clamp01((u - 0.25) / 0.75);
+            const rearTaper = 1 - 0.1 * clamp01((-u - 0.35) / 0.65);
+            const midBulge = 1 + 0.12 * Math.exp(-u * u * 2.6);
+            const ripple = 1 + (hash(seed + u * 5.9, 1.7) - 0.5) * 0.1;
+            return carW * 0.5 * frontTaper * rearTaper * midBulge * ripple;
+          };
+          const roofHeight = (u, v) =>
+            carH * (0.72 + 0.22 * Math.exp(-u * u * 2.1) * (1 - 0.42 * v * v));
+
+          // Main vehicle returns: irregular shell sampling (side/end/roof mix).
+          for (let n = 0; n < 760; n += 1) {
+            const u = hash(seed + 0.3, n * 0.71) * 2 - 1;
+            const v = hash(seed + 1.1, n * 0.57) * 2 - 1;
+            const band = hash(seed + 2.4, n * 0.63);
+            const mode = hash(seed + 3.7, n * 0.49);
+            const hw = bodyHalfW(u);
+            const baseJx = (hash(seed + 4.2, n * 0.77) - 0.5) * 0.12;
+            const baseJz = (hash(seed + 5.4, n * 0.69) - 0.5) * 0.1;
+            const baseJy = (hash(seed + 6.8, n * 0.55) - 0.5) * 0.06;
+
+            let lx = u * carL * 0.5;
+            let lz = v * hw;
+            let y = 0.16 + band * (roofHeight(u, v) - 0.12);
+
+            if (mode < 0.56) {
+              // Side-dominant points.
+              const side = v >= 0 ? 1 : -1;
+              lz = side * hw + baseJz;
+              lx += baseJx;
+              y = 0.14 + band * (roofHeight(u, side * 0.9) - 0.1) + baseJy;
+            } else if (mode < 0.82) {
+              // Front/rear curved end-caps.
+              const end = mode < 0.69 ? 1 : -1;
+              const t = hash(seed + 7.9, n * 0.43);
+              const arc = hash(seed + 9.1, n * 0.61) * 2 - 1;
+              lx = end * (carL * 0.5 - 0.52 * t) + baseJx;
+              const endW = hw * (0.56 + 0.44 * Math.sqrt(Math.max(0, 1 - t)));
+              lz = arc * endW + baseJz;
+              y = 0.18 + band * (carH * (0.86 - 0.28 * t)) + baseJy;
+            } else {
+              // Sparse roof/hood points.
+              lx = u * carL * 0.42 + baseJx * 0.7;
+              lz = v * hw * 0.78 + baseJz * 0.7;
+              y = roofHeight(u, v) + baseJy;
+            }
+
+            const p = toWorld(lx, lz);
+            const range = Math.hypot(p.x, p.z);
+            const keep = Math.max(0.38, 0.9 - range * 0.014);
+            if (hash(seed + 10.7, n * 0.35) > keep) continue;
+            pts.push(p.x, y, p.z);
+          }
+
+          // Low wheel-arch clusters to break boxy shape further.
+          const wheels = [
+            { x: 1.2, z: 0.68 },
+            { x: 1.2, z: -0.68 },
+            { x: -1.12, z: 0.68 },
+            { x: -1.12, z: -0.68 }
+          ];
+          for (let wi = 0; wi < wheels.length; wi += 1) {
+            const wc = wheels[wi];
+            for (let m = 0; m < 34; m += 1) {
+              const t = hash(seed + 12.1 + wi, m * 0.41) * TAU;
+              const rr = 0.2 + hash(seed + 13.3 + wi, m * 0.53) * 0.16;
+              const lx = wc.x + Math.cos(t) * rr * 0.56;
+              const lz = wc.z + Math.sin(t) * rr * 0.28;
+              const p = toWorld(lx, lz);
+              const y = 0.12 + Math.abs(Math.sin(t)) * 0.22 + (hash(seed + 14.7, m * 0.37) - 0.5) * 0.03;
+              if (hash(seed + 15.9 + wi, m * 0.29) < 0.24) continue;
+              pts.push(p.x, y, p.z);
+            }
+          }
+        }
+
+        pointGeom.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+      }
+
+      function enterPredictStage(isReset = false) {
+        normalizeTrackStatuses();
+
+        state.priors = state.tracks.map((t) => ({
+          trackId: t.id,
+          x: t.x + t.vx * PRIOR_LOOKAHEAD,
+          z: t.z + t.vz * PRIOR_LOOKAHEAD,
+          yaw: Math.atan2(t.vz, t.vx)
+        }));
+
+        state.detections = [];
+        state.costMatrix = [];
+        state.matches = [];
+        state.unmatchedTrackIdx = [];
+        state.unmatchedDetIdx = [];
+        state.step = 0;
+
+        updatePointCloud();
+
+        if (!isReset) {
+          pushLog(`Frame ${state.frame}: Kalman prediction generated ${state.priors.length} priors.`);
+        }
+      }
+
+      function enterDetectionStage() {
+        state.detections = buildScriptedDetections();
+        state.step = 1;
+        pushLog(`Frame ${state.frame}: detector outputs ${state.detections.length} detections.`);
+      }
+
+      function enterAssociationStage() {
+        const out = computeAssociations(state.priors, state.detections);
+        state.costMatrix = out.matrix;
+        state.matches = out.matches;
+        state.unmatchedTrackIdx = out.unmatchedTrackIdx;
+        state.unmatchedDetIdx = out.unmatchedDetIdx;
+        state.step = 2;
+
+        if (state.matches.length) {
+          for (const m of state.matches) {
+            const tid = state.priors[m.trackIdx]?.trackId;
+            const did = state.detections[m.detIdx]?.id;
+            pushLog(`Track #${String(tid).padStart(2, "0")} matched ${did} (cost ${m.cost.toFixed(2)}).`);
+          }
+        } else {
+          pushLog("No valid association under gating threshold.");
+        }
+      }
+
+      function enterUpdateStage() {
+        const prevPoseById = new Map(state.tracks.map((t) => [t.id, { x: t.x, z: t.z, yaw: t.yaw }]));
+        const detByTrack = new Map(state.matches.map((m) => [m.trackIdx, m.detIdx]));
+
+        state.tracks = state.tracks.map((t, i) => {
+          const prior = state.priors[i] || { x: t.x, z: t.z };
+          const detIdx = detByTrack.get(i);
+
+          if (detIdx == null) {
+            const nx = prior.x;
+            const nz = prior.z;
+            const nvx = t.vx * 0.92;
+            const nvz = t.vz * 0.92;
+            return {
+              ...t,
+              x: nx,
+              z: nz,
+              vx: nvx,
+              vz: nvz,
+              yaw: Math.atan2(nvz, nvx),
+              miss: t.miss + 1,
+              status: "unmatched",
+              history: [...t.history, { x: nx, z: nz }].slice(-22)
+            };
+          }
+
+          const d = state.detections[detIdx];
+          const nx = lerp(prior.x, d.x, 0.64);
+          const nz = lerp(prior.z, d.z, 0.64);
+          const nvx = nx - t.x;
+          const nvz = nz - t.z;
+          return {
+            ...t,
+            x: nx,
+            z: nz,
+            vx: nvx,
+            vz: nvz,
+            yaw: Math.atan2(nvz, nvx),
+            miss: 0,
+            status: "updated",
+            history: [...t.history, { x: nx, z: nz }].slice(-22)
+          };
+        });
+
+        if (state.frame === SCRIPT_BIRTH_FRAME && !state.script.birthDone) {
+          const birthDetIdx = state.unmatchedDetIdx[0];
+          if (birthDetIdx != null) {
+            const d = state.detections[birthDetIdx];
+            const newborn = makeTrack(state.nextTrackId, d.x, d.z, 0.88, 0.04, "newborn");
+            newborn.history = [
+              { x: d.x - 0.8, z: d.z - 0.02 },
+              { x: d.x, z: d.z }
+            ];
+            state.tracks.push(newborn);
+            pushLog(`Step 4 Birth: Track #${String(state.nextTrackId).padStart(2, "0")} created from ${d.id}.`);
+            state.nextTrackId += 1;
+            state.script.birthDone = true;
+            state.unmatchedDetIdx = state.unmatchedDetIdx.filter((di) => di !== birthDetIdx);
+          }
+        }
+
+        const nowMs = performance.now();
+        for (const t of state.tracks) {
+          const fromPose = prevPoseById.get(t.id);
+          if (!fromPose) continue;
+          pushTrackMove(t.id, fromPose, { x: t.x, z: t.z, yaw: t.yaw }, nowMs);
+        }
+
+        state.step = 3;
+        pushLog("Matched tracks updated with prior + detection fusion.");
+      }
+
+      function enterLifecycleStage() {
+        let removed = false;
+        if (state.frame === SCRIPT_DEATH_FRAME && !state.script.deathDone) {
+          const nowMs = performance.now();
+          const kept = [];
+          for (const t of state.tracks) {
+            if (t.id !== SCRIPT_DEATH_TRACK_ID) {
+              kept.push(t);
+              continue;
+            }
+
+            const pose = getTrackPoseForRender(t, nowMs);
+            const fadeColor =
+              t.status === "newborn" ? COLORS.birth : t.status === "unmatched" ? COLORS.lost : COLORS.update;
+            state.animation.fadingTracks.push({
+              id: t.id,
+              x: pose.x,
+              z: pose.z,
+              yaw: pose.yaw,
+              color: fadeColor,
+              history: [...t.history],
+              start: nowMs,
+              end: nowMs + TRACK_FADE_MS
+            });
+            delete state.animation.trackMoves[t.id];
+            pushLog(`Track #${String(SCRIPT_DEATH_TRACK_ID).padStart(2, "0")} removed (scripted death).`);
+            removed = true;
+          }
+          state.tracks = kept;
+          state.script.deathDone = true;
+        }
+
+        if (!removed) {
+          pushLog("Lifecycle stable: no birth/death event.");
+        }
+
+        state.step = 4;
+      }
+
+      function nextStep() {
+        if (state.step === 0) {
+          enterDetectionStage();
+        } else if (state.step === 1) {
+          enterAssociationStage();
+        } else if (state.step === 2) {
+          enterUpdateStage();
+        } else if (state.step === 3) {
+          enterLifecycleStage();
+        } else {
+          state.frame += 1;
+          enterPredictStage();
+        }
+
+        renderPanels();
+      }
+
+      function renderCostMatrix() {
+        if (state.step < 2 || !state.costMatrix.length || !state.detections.length) {
+          matrixWrap.innerHTML = `<div style="padding:26px 6px;color:#94a3b8;font-size:12px;text-align:center;">Association stage will render matrix here.</div>`;
+          return;
+        }
+
+        let html = "<table><thead><tr><th>Track \\\\ Det</th>";
+        for (const d of state.detections) html += `<th>${d.id}</th>`;
+        html += "</tr></thead><tbody>";
+
+        for (let i = 0; i < state.priors.length; i += 1) {
+          const tid = state.priors[i]?.trackId;
+          html += `<tr><td>#${String(tid).padStart(2, "0")}</td>`;
+          for (let j = 0; j < state.detections.length; j += 1) {
+            const v = state.costMatrix[i]?.[j];
+            const hit = state.matches.some((m) => m.trackIdx === i && m.detIdx === j);
+            html += `<td class="${hit ? "hit" : ""}">${Number.isFinite(v) ? v.toFixed(2) : "-"}</td>`;
+          }
+          html += "</tr>";
+        }
+
+        html += "</tbody></table>";
+        matrixWrap.innerHTML = html;
+      }
+
+      function renderLogs() {
+        logList.innerHTML = "";
+        for (const l of state.logs) {
+          const item = document.createElement("div");
+          item.className = "log-item";
+          item.textContent = l;
+          logList.appendChild(item);
+        }
+      }
+
+      function renderPanels() {
+        framePill.textContent = `Frame ${state.frame}`;
+        stepPill.textContent = `Step ${state.step + 1} / ${STEPS.length}`;
+        autoBtn.textContent = state.auto ? "Auto Playing" : "Auto Play";
+
+        stageTitleEl.textContent = STEPS[state.step].title;
+        stageDescEl.textContent = STEPS[state.step].desc;
+
+        stageNodes.forEach((n, i) => {
+          n.classList.toggle("active", i === state.step);
+          n.classList.toggle("done", i < state.step);
+        });
+
+        renderCostMatrix();
+        renderLogs();
+        renderScene();
+      }
+
+      function renderScene(nowMs = performance.now()) {
+        // Hard reset label layer each pass to avoid stale CSS2D nodes lingering in DOM.
+        labelRenderer.domElement.replaceChildren();
+        wideLineMats.length = 0;
+
+        clearGroup(groupTracks);
+        clearGroup(groupPriors);
+        clearGroup(groupDets);
+        clearGroup(groupAssoc);
+
+        // Tracks from t-1 or updated track set
+        for (const t of state.tracks) {
+          let color = COLORS.trackPrev;
+          let wireOpacity = 0.9;
+          let fillOpacity = 0.08;
+
+          if (state.step >= 3) {
+            if (t.status === "updated") {
+              color = COLORS.update;
+              fillOpacity = 0.12;
+            } else if (t.status === "newborn") {
+              color = COLORS.birth;
+              fillOpacity = 0.14;
+            } else if (t.status === "unmatched") {
+              color = COLORS.lost;
+              fillOpacity = 0.06;
+              wireOpacity = 0.74;
+            }
+          }
+
+          if (state.step === 0) {
+            color = COLORS.trackPrev;
+          }
+
+          const pose = getTrackPoseForRender(t, nowMs);
+
+          addBox(groupTracks, {
+            x: pose.x,
+            z: pose.z,
+            yaw: pose.yaw,
+            color,
+            wireOpacity,
+            wireWidth: BOX_WIRE_WIDTH,
+            fillOpacity,
+            label: `x_(t-1) #${String(t.id).padStart(2, "0")}`,
+            labelLeader: true,
+            labelCorner: new THREE.Vector3(-1, 1, 1),
+            labelOffset: new THREE.Vector3(-1.24, 1.02, 0.86)
+          });
+
+          // trail
+          if (t.history.length > 1 || pose.moving) {
+            const path = t.history.slice(-18).map((p) => ({ x: p.x, z: p.z }));
+            if (!path.length) path.push({ x: pose.x, z: pose.z });
+            if (pose.moving) {
+              path[path.length - 1] = { x: pose.x, z: pose.z };
+            }
+            const coords = [];
+            for (const p of path) {
+              coords.push(p.x, 0.06, p.z);
+            }
+            if (coords.length >= 6) {
+              const g = new LineGeometry();
+              g.setPositions(coords);
+              const mat = new LineMaterial({
+                color: t.status === "newborn" ? COLORS.birth : COLORS.update,
+                transparent: true,
+                opacity: t.status === "unmatched" ? 0.25 : 0.48,
+                linewidth: TRAIL_LINE_WIDTH,
+                worldUnits: false
+              });
+              mat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+              wideLineMats.push(mat);
+              const line = new Line2(g, mat);
+              line.renderOrder = 2;
+              groupTracks.add(line);
+            }
+          }
+        }
+
+        // Fading-out tracks (death transition)
+        for (const ft of state.animation.fadingTracks) {
+          const t = clamp01((nowMs - ft.start) / Math.max(1, ft.end - ft.start));
+          const alpha = 1 - t;
+          if (alpha <= 0) continue;
+
+          addBox(groupTracks, {
+            x: ft.x,
+            z: ft.z,
+            yaw: ft.yaw,
+            color: ft.color || COLORS.update,
+            wireOpacity: 0.9 * alpha,
+            wireWidth: BOX_WIRE_WIDTH,
+            fillOpacity: 0.12 * alpha,
+            label: null,
+            labelLeader: false
+          });
+
+          if (ft.history && ft.history.length > 1) {
+            const coords = [];
+            for (const p of ft.history.slice(-18)) {
+              coords.push(p.x, 0.06, p.z);
+            }
+            if (coords.length >= 6) {
+              const g = new LineGeometry();
+              g.setPositions(coords);
+              const mat = new LineMaterial({
+                color: ft.color || COLORS.update,
+                transparent: true,
+                opacity: 0.36 * alpha,
+                linewidth: TRAIL_LINE_WIDTH,
+                worldUnits: false
+              });
+              mat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+              wideLineMats.push(mat);
+              const line = new Line2(g, mat);
+              line.renderOrder = 1;
+              groupTracks.add(line);
+            }
+          }
+        }
+
+        // Priors
+        if (state.step <= 3) {
+          for (const p of state.priors) {
+            addBox(groupPriors, {
+              x: p.x,
+              z: p.z,
+              yaw: p.yaw,
+              color: COLORS.prior,
+              wireOpacity: state.step >= 2 ? 0.98 : 0.9,
+              wireWidth: BOX_WIRE_WIDTH,
+              fillOpacity: 0.02,
+              dashed: false,
+              label: "Prior x_t",
+              labelLeader: true,
+              labelCorner: new THREE.Vector3(1, 1, -1),
+              labelOffset: new THREE.Vector3(1.24, 1.02, -0.86)
+            });
+          }
+        }
+
+        // Detections
+        if (state.step >= 1 && state.step <= 4) {
+          for (const d of state.detections) {
+            addBox(groupDets, {
+              x: d.x,
+              z: d.z,
+              yaw: d.yaw,
+              sizeX: TRACK_SIZE.x * 0.94,
+              sizeY: TRACK_SIZE.y,
+              sizeZ: TRACK_SIZE.z * 0.94,
+              color: COLORS.detection,
+              wireOpacity: 0.88,
+              wireWidth: BOX_WIRE_WIDTH,
+              fillOpacity: 0.1,
+              label: "z_t",
+              labelLeader: true,
+              labelCorner: new THREE.Vector3(1, 1, 1),
+              labelOffset: new THREE.Vector3(1.32, 1.06, 0.72)
+            });
+          }
+        }
+
+        // Association lines
+        if (state.step >= 2 && state.step <= 3) {
+          const matchedSet = new Set(state.matches.map((m) => `${m.trackIdx}-${m.detIdx}`));
+
+          for (let i = 0; i < state.priors.length; i += 1) {
+            for (let j = 0; j < state.detections.length; j += 1) {
+              const hit = matchedSet.has(`${i}-${j}`);
+              addAssocLine(
+                groupAssoc,
+                state.priors[i],
+                state.detections[j],
+                hit ? COLORS.assoc : 0x1e40af,
+                hit ? 0.95 : 0.28
+              );
+            }
+          }
+        }
+      }
+
+      // ---------- Controls ----------
+      let autoTimer = null;
+
+      function stopAuto() {
+        if (autoTimer) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+        }
+        state.auto = false;
+      }
+
+      function startAuto() {
+        stopAuto();
+        state.auto = true;
+        autoTimer = setInterval(() => {
+          nextStep();
+        }, 1400);
+      }
+
+      nextBtn.addEventListener("click", () => {
+        nextStep();
+      });
+
+      autoBtn.addEventListener("click", () => {
+        if (state.auto) stopAuto();
+        else startAuto();
+        renderPanels();
+      });
+
+      resetBtn.addEventListener("click", () => {
+        stopAuto();
+        initState();
+        renderPanels();
+      });
+
+      // ---------- Resize + Render Loop ----------
+      window.addEventListener("resize", () => {
+        camera.aspect = viewport.clientWidth / viewport.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        labelRenderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        for (const m of wideLineMats) {
+          m.resolution.set(renderer.domElement.width, renderer.domElement.height);
+        }
+      });
+
+      function tick() {
+        const nowMs = performance.now();
+        const vis = updateVisualAnimations(nowMs);
+        if (vis.active || vis.changed) {
+          renderScene(nowMs);
+        }
+        controls.update();
+        renderer.render(scene, camera);
+        labelRenderer.render(scene, camera);
+        requestAnimationFrame(tick);
+      }
+
+      initState();
+      renderPanels();
+      tick();
+    </script>
+  </body>
+</html>

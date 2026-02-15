@@ -1,0 +1,1886 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voxel R-CNN Two-Stage Demo</title>
+    <style>
+      :root {
+        --bg-0: #ffffff;
+        --bg-1: #f5f8fc;
+        --bg-panel: rgba(8, 14, 24, 0.82);
+        --line: rgba(150, 185, 230, 0.24);
+        --text: #e7eefc;
+        --text-dim: #98a8c4;
+        --accent: #71d0ff;
+        --accent-green: #45f7a3;
+        --accent-yellow: #ffd95f;
+        --accent-purple: #bc91ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background:
+          radial-gradient(1200px 620px at 18% 18%, rgba(61, 129, 210, 0.08), transparent 70%),
+          radial-gradient(980px 540px at 87% 8%, rgba(74, 171, 166, 0.06), transparent 72%),
+          linear-gradient(160deg, var(--bg-0), var(--bg-1));
+        color: var(--text);
+        font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      #app {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      #top-header {
+        height: 56px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(120deg, rgba(12, 24, 42, 0.92), rgba(10, 18, 34, 0.84));
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+      }
+
+      #top-header h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      #status-pill {
+        border: 1px solid rgba(123, 185, 255, 0.4);
+        border-radius: 999px;
+        background: rgba(62, 122, 193, 0.18);
+        color: #dbe8ff;
+        padding: 6px 10px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      #content {
+        min-height: 0;
+        flex: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 350px;
+        gap: 10px;
+      }
+
+      #viewport-panel {
+        position: relative;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        overflow: hidden;
+        background: #ffffff;
+      }
+
+      #three-root {
+        position: absolute;
+        inset: 0;
+      }
+
+      #scene-hint {
+        position: absolute;
+        left: 10px;
+        top: 10px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(170, 205, 255, 0.26);
+        background: rgba(12, 24, 42, 0.75);
+        color: #c8d8ef;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        pointer-events: none;
+      }
+
+      #stage-overlay {
+        position: absolute;
+        left: 10px;
+        top: 46px;
+        width: 260px;
+        max-width: calc(100% - 20px);
+        border-radius: 10px;
+        border: 1px solid rgba(106, 154, 211, 0.38);
+        background: rgba(255, 255, 255, 0.82);
+        backdrop-filter: blur(3px);
+        padding: 8px;
+        display: grid;
+        gap: 6px;
+        pointer-events: none;
+      }
+
+      .stage-mini {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 6px;
+        border-radius: 8px;
+        border: 1px solid rgba(140, 178, 221, 0.38);
+        background: rgba(244, 249, 255, 0.9);
+        color: #3e5778;
+        font-size: 11px;
+        transition: background 0.22s ease, border-color 0.22s ease, color 0.22s ease, transform 0.22s ease;
+      }
+
+      .stage-mini .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(97, 143, 203, 0.82);
+        box-shadow: 0 0 0 1px rgba(167, 199, 236, 0.55);
+      }
+
+      .stage-mini.done {
+        color: #1f7a53;
+        border-color: rgba(74, 171, 126, 0.46);
+        background: rgba(234, 251, 241, 0.95);
+      }
+
+      .stage-mini.done .dot {
+        background: #35c87d;
+      }
+
+      .stage-mini.active {
+        color: #123c67;
+        border-color: rgba(82, 155, 222, 0.72);
+        background: linear-gradient(135deg, rgba(231, 244, 255, 0.97), rgba(213, 233, 255, 0.95));
+        transform: translateX(2px);
+      }
+
+      .stage-mini.active .dot {
+        background: #2f93ff;
+        box-shadow: 0 0 10px rgba(85, 157, 230, 0.55);
+      }
+
+      #timeline-panel {
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(13, 25, 45, 0.9), rgba(8, 15, 27, 0.9));
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      #timeline-panel h2 {
+        margin: 4px 2px 8px;
+        font-size: 14px;
+        color: #dbe7ff;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      #timeline-list {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        display: grid;
+        gap: 8px;
+        padding-right: 4px;
+      }
+
+      .step-card {
+        border-radius: 10px;
+        border: 1px solid rgba(165, 199, 240, 0.18);
+        background: rgba(8, 17, 32, 0.72);
+        padding: 8px;
+        transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
+      }
+
+      .step-card .step-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .step-index {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(166, 202, 255, 0.25);
+        color: #bcd0f1;
+      }
+
+      .step-title {
+        flex: 1;
+        font-size: 12px;
+        font-weight: 600;
+        color: #dde9ff;
+      }
+
+      .step-card p {
+        margin: 6px 0 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--text-dim);
+      }
+
+      .step-card .tensor {
+        color: #8ed0ff;
+      }
+
+      .step-card .what {
+        color: #bfd4ff;
+      }
+
+      .step-card.active {
+        border-color: rgba(122, 195, 255, 0.78);
+        background: linear-gradient(145deg, rgba(18, 40, 70, 0.92), rgba(10, 24, 44, 0.9));
+        transform: translateX(-2px);
+      }
+
+      .step-card.done {
+        border-color: rgba(90, 176, 140, 0.36);
+        background: rgba(8, 22, 28, 0.74);
+      }
+
+      #control-bar {
+        height: 76px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(120deg, rgba(11, 21, 37, 0.92), rgba(8, 14, 24, 0.84));
+        padding: 8px 10px;
+        display: grid;
+        grid-template-columns: auto auto auto minmax(160px, 1fr) auto auto auto;
+        align-items: center;
+        gap: 8px;
+      }
+
+      button,
+      .speed-btn {
+        border: 1px solid rgba(157, 195, 240, 0.28);
+        background: rgba(20, 38, 63, 0.62);
+        color: #dde9ff;
+        height: 36px;
+        border-radius: 9px;
+        padding: 0 12px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: border-color 0.2s ease, background 0.2s ease, transform 0.12s ease;
+      }
+
+      button:hover,
+      .speed-btn:hover {
+        border-color: rgba(141, 203, 255, 0.7);
+        background: rgba(39, 71, 112, 0.62);
+      }
+
+      button:active,
+      .speed-btn:active {
+        transform: translateY(1px);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      #scrub {
+        width: 100%;
+        accent-color: #77d4ff;
+      }
+
+      #speed-group {
+        display: inline-flex;
+        border-radius: 9px;
+        overflow: hidden;
+        border: 1px solid rgba(153, 193, 240, 0.28);
+      }
+
+      .speed-btn {
+        min-width: 52px;
+        border: 0;
+        border-right: 1px solid rgba(153, 193, 240, 0.22);
+        border-radius: 0;
+      }
+
+      .speed-btn:last-child {
+        border-right: 0;
+      }
+
+      .speed-btn.active {
+        background: rgba(79, 157, 255, 0.38);
+        color: #ffffff;
+      }
+
+      .box-label {
+        color: #f4f8ff;
+        font-size: 11px;
+        line-height: 1.1;
+        padding: 4px 7px;
+        border-radius: 8px;
+        border: 1px solid rgba(210, 228, 255, 0.38);
+        background: rgba(10, 18, 33, 0.78);
+        white-space: nowrap;
+        user-select: none;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s linear;
+      }
+
+      @media (max-width: 1120px) {
+        #content {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(280px, 1fr) 300px;
+        }
+
+        #control-bar {
+          grid-template-columns: auto auto auto minmax(100px, 1fr) auto auto;
+          grid-template-rows: 1fr 1fr;
+          height: auto;
+        }
+
+        #resetView {
+          grid-column: 1 / span 2;
+        }
+
+        #speed-group {
+          grid-column: 3 / span 2;
+        }
+
+        #exportGif {
+          grid-column: 5 / span 2;
+        }
+
+        #stage-overlay {
+          width: 220px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header id="top-header">
+        <h1>Voxel R-CNN: Two-Stage 3D Detection (Demo)</h1>
+        <div id="status-pill">Step 1 / 7</div>
+      </header>
+
+      <section id="content">
+        <div id="viewport-panel">
+          <div id="three-root"></div>
+          <div id="scene-hint">Mouse: Left rotate · Wheel zoom · Right pan</div>
+          <div id="stage-overlay"></div>
+        </div>
+
+        <aside id="timeline-panel">
+          <h2>Pipeline Timeline</h2>
+          <div id="timeline-list"></div>
+        </aside>
+      </section>
+
+      <footer id="control-bar">
+        <button id="playPause">Pause</button>
+        <button id="prevStep">Prev</button>
+        <button id="nextStep">Next</button>
+        <input id="scrub" type="range" min="0" max="1000" value="0" />
+        <div id="speed-group">
+          <button class="speed-btn" data-speed="0.5">0.5x</button>
+          <button class="speed-btn active" data-speed="1">1x</button>
+          <button class="speed-btn" data-speed="2">2x</button>
+        </div>
+        <button id="resetView">Reset View</button>
+        <button id="exportGif">Export GIF</button>
+      </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+      import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+      import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+      import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+
+      // ---------- Pipeline Step Metadata ----------
+      const STEPS = [
+        {
+          id: "voxelize",
+          duration: 3.2,
+          title: "Point Cloud -> Voxelization",
+          description: "把原始点云按固定体素大小分桶，形成稀疏体素输入。",
+          tensor: "关键概念: points [N,3] -> voxels [M, C]",
+          what: "你正在看到什么: 灰白点云逐步被蓝色透明体素覆盖。"
+        },
+        {
+          id: "backbone",
+          duration: 3.0,
+          title: "Sparse 3D Backbone",
+          description: "稀疏 3D backbone 在占据体素上提取多尺度语义特征。",
+          tensor: "关键概念: sparse feature map (仅在非空体素计算)",
+          what: "你正在看到什么: 更亮的特征体素被激活并有节奏脉动。"
+        },
+        {
+          id: "rpn",
+          duration: 3.5,
+          title: "RPN Proposals",
+          description: "第一阶段 RPN 做粗定位，生成大量 3D proposals 并按 score 过滤。",
+          tensor: "关键概念: proposals + objectness score",
+          what: "你正在看到什么: 黄色候选框从少到多出现，低分框逐渐被过滤。"
+        },
+        {
+          id: "nms",
+          duration: 3.1,
+          title: "Proposal NMS",
+          description: "对重叠 proposal 做 NMS，保留高分框，抑制冗余框。",
+          tensor: "关键概念: IoU + NMS keep/suppress",
+          what: "你正在看到什么: 被抑制框红色闪烁后淡出，保留框留下。"
+        },
+        {
+          id: "roi",
+          duration: 5.2,
+          title: "RoI-aware / Grid Pooling",
+          description: "在每个 proposal 内做网格采样，从全局特征图聚合局部 RoI 特征。",
+          tensor: "关键概念: RoI grid points -> pooled local feature",
+          what: "你正在看到什么: proposal 内出现紫色采样点，附近全局特征被高亮。"
+        },
+        {
+          id: "refine",
+          duration: 3.4,
+          title: "Second-stage Refinement",
+          description: "第二阶段对 proposal 做精修：中心、尺寸、朝向和分类分数同步更新。",
+          tensor: "关键概念: delta(x,y,z,l,w,h,yaw) + cls score",
+          what: "你正在看到什么: 候选框平滑回归到更贴合目标的几何位置。"
+        },
+        {
+          id: "final",
+          duration: 2.9,
+          title: "Final 3D Detections",
+          description: "输出最终检测结果：高置信框 + 类别标签。",
+          tensor: "关键概念: final boxes [K, 7] + class/confidence",
+          what: "你正在看到什么: 绿色最终框被高亮显示并标注类别与置信度。"
+        }
+      ];
+
+      const totalDuration = STEPS.reduce((sum, step) => sum + step.duration, 0);
+      const stepStarts = [];
+      {
+        let acc = 0;
+        for (const step of STEPS) {
+          stepStarts.push(acc);
+          acc += step.duration;
+        }
+      }
+
+      // ---------- DOM ----------
+      const viewport = document.getElementById("three-root");
+      const timelineList = document.getElementById("timeline-list");
+      const statusPill = document.getElementById("status-pill");
+      const stageOverlay = document.getElementById("stage-overlay");
+      const playPauseBtn = document.getElementById("playPause");
+      const prevStepBtn = document.getElementById("prevStep");
+      const nextStepBtn = document.getElementById("nextStep");
+      const scrub = document.getElementById("scrub");
+      const resetViewBtn = document.getElementById("resetView");
+      const exportGifBtn = document.getElementById("exportGif");
+      const speedButtons = [...document.querySelectorAll(".speed-btn")];
+
+      const stepCards = STEPS.map((step, i) => {
+        const card = document.createElement("div");
+        card.className = "step-card";
+        card.innerHTML = `
+          <div class="step-top">
+            <span class="step-index">Step ${i + 1}</span>
+            <span class="step-title">${step.title}</span>
+          </div>
+          <p>${step.description}</p>
+          <p class="tensor">${step.tensor}</p>
+          <p class="what">${step.what}</p>
+        `;
+        timelineList.appendChild(card);
+        return card;
+      });
+
+      const stageMiniNodes = STEPS.map((step, i) => {
+        const row = document.createElement("div");
+        row.className = "stage-mini";
+        row.innerHTML = `<span class="dot"></span><span>${i + 1}. ${step.title}</span>`;
+        stageOverlay.appendChild(row);
+        return row;
+      });
+
+      // ---------- Helpers ----------
+      const clamp = THREE.MathUtils.clamp;
+      const lerp = THREE.MathUtils.lerp;
+      const smooth = (x) => {
+        const t = clamp(x, 0, 1);
+        return t * t * (3 - 2 * t);
+      };
+      const ease = (x) => {
+        const t = clamp(x, 0, 1);
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      };
+      const rand = (min, max) => min + Math.random() * (max - min);
+      const randInt = (min, max) => Math.floor(rand(min, max + 1));
+
+      function randomNormal(mean = 0, std = 1) {
+        const u = Math.max(1e-6, Math.random());
+        const v = Math.max(1e-6, Math.random());
+        const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+        return mean + z * std;
+      }
+
+      const lidarCenterOffset = { x: 0, y: 0, z: 0 };
+
+      function lidarToWorld(x, y, z) {
+        return new THREE.Vector3(x - lidarCenterOffset.x, z - lidarCenterOffset.z, y - lidarCenterOffset.y);
+      }
+
+      function stepProgress(stepIndex, timeSec) {
+        const start = stepStarts[stepIndex];
+        const end = start + STEPS[stepIndex].duration;
+        return clamp((timeSec - start) / (end - start), 0, 1);
+      }
+
+      function stepIndexAt(timeSec) {
+        for (let i = STEPS.length - 1; i >= 0; i -= 1) {
+          if (timeSec >= stepStarts[i]) {
+            return i;
+          }
+        }
+        return 0;
+      }
+
+      function jumpToStep(stepIndex) {
+        const idx = clamp(stepIndex, 0, STEPS.length - 1);
+        setPlayhead(stepStarts[idx] + 0.0001);
+      }
+
+      function drawRoundedRect(ctx, x, y, w, h, r) {
+        const radius = Math.min(r, w * 0.5, h * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + w - radius, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        ctx.lineTo(x + w, y + h - radius);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        ctx.lineTo(x + radius, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+      }
+
+      function getAABB(box) {
+        return {
+          x1: box.center.x - box.size.l * 0.5,
+          x2: box.center.x + box.size.l * 0.5,
+          y1: box.center.y - box.size.w * 0.5,
+          y2: box.center.y + box.size.w * 0.5,
+          z1: box.center.z - box.size.h * 0.5,
+          z2: box.center.z + box.size.h * 0.5
+        };
+      }
+
+      function iou3D(a, b) {
+        const A = getAABB(a);
+        const B = getAABB(b);
+        const ix = Math.max(0, Math.min(A.x2, B.x2) - Math.max(A.x1, B.x1));
+        const iy = Math.max(0, Math.min(A.y2, B.y2) - Math.max(A.y1, B.y1));
+        const iz = Math.max(0, Math.min(A.z2, B.z2) - Math.max(A.z1, B.z1));
+        const inter = ix * iy * iz;
+        if (inter <= 0) return 0;
+        const va = (A.x2 - A.x1) * (A.y2 - A.y1) * (A.z2 - A.z1);
+        const vb = (B.x2 - B.x1) * (B.y2 - B.y1) * (B.z2 - B.z1);
+        return inter / (va + vb - inter);
+      }
+
+      function runNMS(boxes, iouThreshold) {
+        const sorted = [...boxes].sort((a, b) => b.score - a.score);
+        const keep = [];
+        const suppressed = [];
+
+        for (const box of sorted) {
+          let bestIou = 0;
+          let suppressedBy = null;
+          for (const k of keep) {
+            const iou = iou3D(box, k);
+            if (iou > bestIou) {
+              bestIou = iou;
+              suppressedBy = k.id;
+            }
+          }
+
+          if (bestIou > iouThreshold) {
+            suppressed.push({ id: box.id, by: suppressedBy, iou: bestIou });
+          } else {
+            keep.push(box);
+          }
+        }
+
+        return { keep, suppressed };
+      }
+
+      function nearestTarget(proposal, targets) {
+        let best = targets[0];
+        let bestDist = Infinity;
+        for (const t of targets) {
+          const dx = proposal.center.x - t.center.x;
+          const dy = proposal.center.y - t.center.y;
+          const dz = proposal.center.z - t.center.z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < bestDist) {
+            bestDist = d2;
+            best = t;
+          }
+        }
+        return best;
+      }
+
+      // ---------- Synthetic Data ----------
+      const targets = [
+        {
+          id: "car-1",
+          cls: "Car",
+          center: { x: 12.0, y: 2.5, z: 0.95 },
+          size: { l: 4.3, w: 1.9, h: 1.62 },
+          yaw: 0.18,
+          finalScore: 0.95
+        },
+        {
+          id: "car-2",
+          cls: "Car",
+          center: { x: 19.4, y: -3.1, z: 0.92 },
+          size: { l: 4.6, w: 2.0, h: 1.72 },
+          yaw: -0.11,
+          finalScore: 0.93
+        },
+        {
+          id: "ped-1",
+          cls: "Pedestrian",
+          center: { x: 27.1, y: 4.2, z: 0.92 },
+          size: { l: 0.95, w: 0.88, h: 2.25 },
+          yaw: 0.35,
+          finalScore: 0.88
+        }
+      ];
+
+      function generatePointCloud() {
+        const points = [];
+
+        // Ground plane
+        for (let i = 0; i < 1400; i += 1) {
+          points.push({
+            x: rand(0, 34),
+            y: rand(-11, 11),
+            z: Math.max(0, randomNormal(0.03, 0.05))
+          });
+        }
+
+        // Object clusters
+        for (const t of targets) {
+          const n = t.cls === "Pedestrian" ? 260 : 420;
+          for (let i = 0; i < n; i += 1) {
+            const yaw = t.yaw;
+            const lx = randomNormal(0, t.size.l * 0.22);
+            const ly = randomNormal(0, t.size.w * 0.25);
+            const lz = randomNormal(0, t.size.h * 0.25);
+
+            const rx = lx * Math.cos(yaw) - ly * Math.sin(yaw);
+            const ry = lx * Math.sin(yaw) + ly * Math.cos(yaw);
+
+            points.push({
+              x: t.center.x + rx,
+              y: t.center.y + ry,
+              z: Math.max(0.03, t.center.z + lz)
+            });
+          }
+        }
+
+        // Sparse noise points
+        for (let i = 0; i < 300; i += 1) {
+          points.push({ x: rand(3, 33), y: rand(-10.5, 10.5), z: rand(0.1, 2.2) * Math.random() * 0.35 });
+        }
+
+        return points;
+      }
+
+      function voxelize(points, voxelSize) {
+        const map = new Map();
+        for (const p of points) {
+          const ix = Math.floor(p.x / voxelSize.x);
+          const iy = Math.floor(p.y / voxelSize.y);
+          const iz = Math.floor(p.z / voxelSize.z);
+          const key = `${ix},${iy},${iz}`;
+          if (!map.has(key)) {
+            map.set(key, { ix, iy, iz, count: 0 });
+          }
+          map.get(key).count += 1;
+        }
+
+        return [...map.values()]
+          .filter((v) => v.count >= 3)
+          .map((v) => {
+            const cx = (v.ix + 0.5) * voxelSize.x;
+            const cy = (v.iy + 0.5) * voxelSize.y;
+            const cz = (v.iz + 0.5) * voxelSize.z;
+            return {
+              ...v,
+              center: { x: cx, y: cy, z: cz },
+              density: clamp(v.count / 18, 0.08, 1)
+            };
+          });
+      }
+
+      function proposalScore(target, center, size) {
+        const dx = (center.x - target.center.x) / Math.max(target.size.l, 1);
+        const dy = (center.y - target.center.y) / Math.max(target.size.w, 1);
+        const dz = (center.z - target.center.z) / Math.max(target.size.h, 1);
+        const distTerm = Math.exp(-(dx * dx + dy * dy + dz * dz));
+
+        const sl = Math.abs(size.l - target.size.l) / target.size.l;
+        const sw = Math.abs(size.w - target.size.w) / target.size.w;
+        const sh = Math.abs(size.h - target.size.h) / target.size.h;
+        const sizeTerm = Math.exp(-1.5 * (sl + sw + sh));
+
+        return clamp(0.12 + 0.8 * distTerm * sizeTerm + rand(-0.06, 0.06), 0.05, 0.97);
+      }
+
+      function generateProposals() {
+        const result = [];
+        let proposalId = 0;
+
+        // proposals around true targets
+        for (const t of targets) {
+          const count = t.cls === "Pedestrian" ? 12 : 16;
+          for (let i = 0; i < count; i += 1) {
+            const c = {
+              x: t.center.x + randomNormal(0, t.cls === "Pedestrian" ? 0.45 : 1.1),
+              y: t.center.y + randomNormal(0, t.cls === "Pedestrian" ? 0.45 : 0.9),
+              z: t.center.z + randomNormal(0, 0.18)
+            };
+            const s = {
+              l: Math.max(0.6, t.size.l * (1 + randomNormal(0, 0.16))),
+              w: Math.max(0.6, t.size.w * (1 + randomNormal(0, 0.14))),
+              h: Math.max(1.1, t.size.h * (1 + randomNormal(0, 0.12)))
+            };
+
+            const score = proposalScore(t, c, s);
+            result.push({
+              id: `p-${proposalId}`,
+              cls: t.cls,
+              center: c,
+              size: s,
+              yaw: t.yaw + randomNormal(0, 0.22),
+              score
+            });
+            proposalId += 1;
+          }
+        }
+
+        // random false anchors/proposals
+        for (let i = 0; i < 16; i += 1) {
+          const cls = i % 4 === 0 ? "Pedestrian" : "Car";
+          result.push({
+            id: `p-${proposalId}`,
+            cls,
+            center: { x: rand(4, 32), y: rand(-9.5, 9.5), z: rand(0.75, 1.1) },
+            size:
+              cls === "Pedestrian"
+                ? { l: rand(0.7, 1.4), w: rand(0.6, 1.2), h: rand(1.3, 2.1) }
+                : { l: rand(3.4, 6.0), w: rand(1.5, 2.9), h: rand(1.4, 2.2) },
+            yaw: rand(-0.8, 0.8),
+            score: rand(0.08, 0.58)
+          });
+          proposalId += 1;
+        }
+
+        // fixed ordering for reproducible sequence feeling
+        result.sort((a, b) => a.id.localeCompare(b.id));
+        return result;
+      }
+
+      const pointCloudData = generatePointCloud();
+      {
+        let sx = 0;
+        let sy = 0;
+        for (const p of pointCloudData) {
+          sx += p.x;
+          sy += p.y;
+        }
+        const n = Math.max(1, pointCloudData.length);
+        lidarCenterOffset.x = sx / n;
+        lidarCenterOffset.y = sy / n;
+        lidarCenterOffset.z = 0;
+      }
+      const voxelSize = { x: 1.1, y: 1.1, z: 0.8 };
+      const voxelCells = voxelize(pointCloudData, voxelSize)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 250);
+
+      const featureVoxels = [...voxelCells].sort((a, b) => b.density - a.density).slice(0, 90);
+
+      const proposals = generateProposals();
+      const scoreFilterThreshold = 0.45;
+      const scoreFiltered = proposals.filter((p) => p.score >= scoreFilterThreshold);
+      const nmsResult = runNMS(scoreFiltered, 0.26);
+
+      const keepIds = new Set(nmsResult.keep.map((p) => p.id));
+      const suppressIds = new Set(nmsResult.suppressed.map((s) => s.id));
+      const scoreFilteredIds = new Set(scoreFiltered.map((p) => p.id));
+
+      const usedRefineProposalIds = new Set();
+      const proposalTargetDistance = (proposal, target) => {
+        const dx = proposal.center.x - target.center.x;
+        const dy = proposal.center.y - target.center.y;
+        const dz = proposal.center.z - target.center.z;
+        return dx * dx + dy * dy + dz * dz;
+      };
+
+      // Build one refinement seed per target so pedestrian also appears in stage-2 refinement.
+      const refinementSeeds = targets.map((target, idx) => {
+        const candidateGroups = [
+          nmsResult.keep.filter((p) => p.cls === target.cls && !usedRefineProposalIds.has(p.id)),
+          nmsResult.keep.filter((p) => !usedRefineProposalIds.has(p.id)),
+          scoreFiltered.filter((p) => p.cls === target.cls && !usedRefineProposalIds.has(p.id)),
+          scoreFiltered.filter((p) => !usedRefineProposalIds.has(p.id)),
+          proposals.filter((p) => p.cls === target.cls),
+          proposals
+        ];
+
+        let chosen = null;
+        for (const candidates of candidateGroups) {
+          if (!candidates.length) continue;
+          chosen = [...candidates].sort((a, b) => proposalTargetDistance(a, target) - proposalTargetDistance(b, target))[0];
+          if (chosen) break;
+        }
+
+        if (!chosen) {
+          chosen = {
+            id: `seed-${idx}`,
+            cls: target.cls,
+            center: {
+              x: target.center.x + rand(-1.2, 1.2),
+              y: target.center.y + rand(-1.0, 1.0),
+              z: target.center.z + rand(-0.15, 0.15)
+            },
+            size: {
+              l: target.size.l * rand(0.85, 1.2),
+              w: target.size.w * rand(0.85, 1.2),
+              h: target.size.h * rand(0.9, 1.1)
+            },
+            yaw: target.yaw + rand(-0.25, 0.25),
+            score: rand(0.45, 0.62)
+          };
+        }
+
+        usedRefineProposalIds.add(chosen.id);
+
+        return {
+          proposal: chosen,
+          target,
+          scoreStart: chosen.score,
+          scoreEnd: clamp(target.finalScore + rand(-0.02, 0.02), 0.72, 0.98)
+        };
+      });
+
+      // ---------- Renderer Setup ----------
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color("#ffffff");
+      scene.fog = new THREE.Fog("#eef3fa", 30, 64);
+
+      const camera = new THREE.PerspectiveCamera(52, viewport.clientWidth / viewport.clientHeight, 0.1, 200);
+      const cameraInitPos = new THREE.Vector3(20, 15, 20);
+      const targetInitPos = new THREE.Vector3(0, 1.2, 0);
+      camera.position.copy(cameraInitPos);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.1;
+      viewport.appendChild(renderer.domElement);
+
+      const labelRenderer = new CSS2DRenderer();
+      labelRenderer.setSize(viewport.clientWidth, viewport.clientHeight);
+      labelRenderer.domElement.style.position = "absolute";
+      labelRenderer.domElement.style.inset = "0";
+      labelRenderer.domElement.style.pointerEvents = "none";
+      viewport.appendChild(labelRenderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.07;
+      controls.enablePan = true;
+      controls.target.copy(targetInitPos);
+      controls.minDistance = 10;
+      controls.maxDistance = 58;
+      controls.maxPolarAngle = Math.PI * 0.49;
+
+      const hemiLight = new THREE.HemisphereLight(0xb3d9ff, 0x162236, 0.6);
+      scene.add(hemiLight);
+
+      const keyLight = new THREE.DirectionalLight(0xc7dcff, 0.85);
+      keyLight.position.set(18, 30, 9);
+      scene.add(keyLight);
+
+      const rimLight = new THREE.DirectionalLight(0x4cb6ff, 0.36);
+      rimLight.position.set(-16, 10, -11);
+      scene.add(rimLight);
+
+      // ---------- Scene Objects ----------
+      const pointGeometry = new THREE.BufferGeometry();
+      const pointPositions = new Float32Array(pointCloudData.length * 3);
+      pointCloudData.forEach((p, i) => {
+        const w = lidarToWorld(p.x, p.y, p.z);
+        pointPositions[i * 3] = w.x;
+        pointPositions[i * 3 + 1] = w.y;
+        pointPositions[i * 3 + 2] = w.z;
+      });
+      pointGeometry.setAttribute("position", new THREE.BufferAttribute(pointPositions, 3));
+
+      const pointMaterial = new THREE.PointsMaterial({
+        color: 0x111111,
+        size: 0.12,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false
+      });
+      const pointCloud = new THREE.Points(pointGeometry, pointMaterial);
+      scene.add(pointCloud);
+
+      const voxelGroup = new THREE.Group();
+      const featureGroup = new THREE.Group();
+      scene.add(voxelGroup);
+      scene.add(featureGroup);
+
+      const voxelGeometry = new THREE.BoxGeometry(voxelSize.x * 0.95, voxelSize.z * 0.95, voxelSize.y * 0.95);
+      const featureGeometry = new THREE.BoxGeometry(voxelSize.x * 0.62, voxelSize.z * 0.62, voxelSize.y * 0.62);
+
+      const voxelVisuals = voxelCells.map((cell) => {
+        const m = new THREE.MeshStandardMaterial({
+          color: 0x1f7bff,
+          emissive: 0x0f4fb8,
+          emissiveIntensity: 0.08,
+          transparent: true,
+          opacity: 0,
+          roughness: 0.2,
+          metalness: 0.05
+        });
+        const mesh = new THREE.Mesh(voxelGeometry, m);
+        mesh.position.copy(lidarToWorld(cell.center.x, cell.center.y, cell.center.z));
+        mesh.scale.setScalar(0.01);
+        voxelGroup.add(mesh);
+        return { mesh, density: cell.density };
+      });
+
+      const featureVisuals = featureVoxels.map((cell) => {
+        const m = new THREE.MeshStandardMaterial({
+          color: 0x00b3ff,
+          emissive: 0x007bc6,
+          emissiveIntensity: 0.15,
+          transparent: true,
+          opacity: 0,
+          roughness: 0.25,
+          metalness: 0.1
+        });
+        const mesh = new THREE.Mesh(featureGeometry, m);
+        mesh.position.copy(lidarToWorld(cell.center.x, cell.center.y, cell.center.z));
+        mesh.scale.setScalar(0.05);
+        featureGroup.add(mesh);
+        return { mesh, lidarCenter: cell.center, density: cell.density };
+      });
+
+      const boxGeom = new THREE.BoxGeometry(1, 1, 1);
+      const boxEdgeGeom = new THREE.EdgesGeometry(boxGeom);
+      const boxLineGeometry = new LineSegmentsGeometry();
+      boxLineGeometry.setPositions(Array.from(boxEdgeGeom.attributes.position.array));
+      const boxLineMaterials = [];
+
+      function updateBoxLineResolution(width, height) {
+        for (const mat of boxLineMaterials) {
+          mat.resolution.set(width, height);
+        }
+      }
+
+      function createLabel(text) {
+        const div = document.createElement("div");
+        div.className = "box-label";
+        div.textContent = text;
+        const obj = new CSS2DObject(div);
+        return { div, obj };
+      }
+
+      function createBoxVisual({ color, fillOpacity = 0.1, wireOpacity = 0.6, labelText = "" }) {
+        const group = new THREE.Group();
+
+        const fillMat = new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.16,
+          transparent: true,
+          opacity: fillOpacity,
+          depthWrite: false,
+          roughness: 0.35,
+          metalness: 0.05
+        });
+        const fill = new THREE.Mesh(boxGeom, fillMat);
+
+        const wireMat = new LineMaterial({
+          color,
+          transparent: true,
+          opacity: wireOpacity,
+          linewidth: 4.0,
+          worldUnits: false
+        });
+        const wire = new LineSegments2(boxLineGeometry, wireMat);
+
+        const wireOuterMat = new LineMaterial({
+          color,
+          transparent: true,
+          opacity: wireOpacity * 0.6,
+          linewidth: 6.0,
+          worldUnits: false
+        });
+        const wireOuter = new LineSegments2(boxLineGeometry, wireOuterMat);
+        wireOuter.scale.setScalar(1.01);
+        wireMat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+        wireOuterMat.resolution.set(renderer.domElement.width, renderer.domElement.height);
+        boxLineMaterials.push(wireMat, wireOuterMat);
+
+        group.add(fill);
+        group.add(wire);
+        group.add(wireOuter);
+
+        const labelAnchor = new THREE.Object3D();
+        group.add(labelAnchor);
+
+        const { div: labelDiv, obj: labelObj } = createLabel(labelText);
+        labelAnchor.add(labelObj);
+
+        return {
+          group,
+          fill,
+          wire,
+          wireOuter,
+          fillMat,
+          wireMat,
+          wireOuterMat,
+          labelDiv,
+          labelAnchor
+        };
+      }
+
+      function applyBoxState(visual, box, yawSign = -1) {
+        visual.group.position.copy(lidarToWorld(box.center.x, box.center.y, box.center.z));
+        visual.group.scale.set(box.size.l, box.size.h, box.size.w);
+        visual.group.rotation.y = yawSign * box.yaw;
+        visual.labelAnchor.position.set(0, box.size.h * 0.62 + 0.2, 0);
+      }
+
+      const proposalGroup = new THREE.Group();
+      scene.add(proposalGroup);
+      const roiLinkGroup = new THREE.Group();
+      scene.add(roiLinkGroup);
+
+      const proposalsByScore = [...proposals].sort((a, b) => b.score - a.score);
+      const labelProposalIds = new Set(proposalsByScore.slice(0, 8).map((p) => p.id));
+
+      const proposalVisualMap = new Map();
+      const proposalVisuals = proposals.map((p, index) => {
+        const v = createBoxVisual({
+          color: 0xffa21a,
+          fillOpacity: 0,
+          wireOpacity: 0,
+          labelText: labelProposalIds.has(p.id) ? `${p.cls} ${(p.score * 100).toFixed(1)}%` : ""
+        });
+        v.group.visible = false;
+        v.labelDiv.style.opacity = "0";
+        applyBoxState(v, p);
+        proposalGroup.add(v.group);
+
+        const item = { proposal: p, visual: v, index };
+        proposalVisualMap.set(p.id, item);
+        return item;
+      });
+
+      // RoI sample points attached to selected kept proposals
+      const roiSphereGeom = new THREE.SphereGeometry(0.08, 12, 12);
+      const roiSamples = [];
+      const roiHighlightSets = [];
+
+      const selectedForRoi = refinementSeeds.map((seed) => seed.proposal.id);
+
+      for (const proposalId of selectedForRoi) {
+        const item = proposalVisualMap.get(proposalId);
+        if (!item) continue;
+
+        const proposal = item.proposal;
+        const localPoints = [];
+        const nx = 4;
+        const ny = 3;
+        const nz = 4;
+
+        for (let ix = 0; ix < nx; ix += 1) {
+          for (let iy = 0; iy < ny; iy += 1) {
+            for (let iz = 0; iz < nz; iz += 1) {
+              const px = lerp(-0.42, 0.42, ix / (nx - 1));
+              const py = lerp(-0.42, 0.42, iy / (ny - 1));
+              const pz = lerp(-0.42, 0.42, iz / (nz - 1));
+              localPoints.push(new THREE.Vector3(px, py, pz));
+            }
+          }
+        }
+
+        const sampleVisuals = localPoints.map((lp, i) => {
+          const m = new THREE.MeshBasicMaterial({ color: 0x944bff, transparent: true, opacity: 0 });
+          const s = new THREE.Mesh(roiSphereGeom, m);
+          s.position.set(lp.x, lp.y, lp.z);
+          s.scale.setScalar(0.2);
+          item.visual.group.add(s);
+          return { mesh: s, order: i };
+        });
+
+        // nearest feature voxel set for highlight
+        const roiSet = new Set();
+        for (let i = 0; i < featureVisuals.length; i += 1) {
+          const c = featureVisuals[i].lidarCenter;
+          const dx = c.x - proposal.center.x;
+          const dy = c.y - proposal.center.y;
+          const dz = c.z - proposal.center.z;
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (d < 3.5) roiSet.add(i);
+        }
+
+        const roiIndices = [...roiSet].sort((a, b) => {
+          const ca = featureVisuals[a].lidarCenter;
+          const cb = featureVisuals[b].lidarCenter;
+          const da = (ca.x - proposal.center.x) ** 2 + (ca.y - proposal.center.y) ** 2 + (ca.z - proposal.center.z) ** 2;
+          const db = (cb.x - proposal.center.x) ** 2 + (cb.y - proposal.center.y) ** 2 + (cb.z - proposal.center.z) ** 2;
+          return da - db;
+        });
+
+        const roiLinkVisuals = roiIndices.slice(0, 14).map((fi, idx) => {
+          const c = featureVisuals[fi].lidarCenter;
+          const startWorld = lidarToWorld(c.x, c.y, c.z);
+          const endWorld = item.visual.group.position.clone();
+          const geo = new THREE.BufferGeometry().setFromPoints([startWorld, endWorld]);
+          const mat = new THREE.LineBasicMaterial({ color: 0x8f43ff, transparent: true, opacity: 0 });
+          const line = new THREE.Line(geo, mat);
+          roiLinkGroup.add(line);
+          return { line, startWorld, pulseSeed: idx * 0.38 };
+        });
+
+        roiHighlightSets.push(roiSet);
+        roiSamples.push({ proposalId, sampleVisuals, roiSet, roiLinkVisuals });
+      }
+
+      // Refinement boxes
+      const refineGroup = new THREE.Group();
+      const finalGroup = new THREE.Group();
+      scene.add(refineGroup);
+      scene.add(finalGroup);
+
+      const refineVisuals = refinementSeeds.map((seed) => {
+        const visual = createBoxVisual({
+          color: 0xffa21a,
+          fillOpacity: 0,
+          wireOpacity: 0,
+          labelText: `${seed.target.cls} ${(seed.scoreStart * 100).toFixed(1)}%`
+        });
+        applyBoxState(visual, seed.proposal);
+        visual.group.visible = false;
+        visual.labelDiv.style.opacity = "0";
+        refineGroup.add(visual.group);
+
+        return {
+          seed,
+          visual
+        };
+      });
+
+      const finalVisuals = targets.map((target) => {
+        const visual = createBoxVisual({
+          color: 0x00d26a,
+          fillOpacity: 0,
+          wireOpacity: 0,
+          labelText: `${target.cls} ${(target.finalScore * 100).toFixed(1)}%`
+        });
+        applyBoxState(visual, target);
+        visual.group.visible = false;
+        visual.labelDiv.style.opacity = "0";
+        finalGroup.add(visual.group);
+        return { target, visual };
+      });
+
+      // ---------- Playback State ----------
+      let playhead = 0;
+      let isPlaying = true;
+      let speed = 1;
+      let lastT = performance.now();
+      let isExporting = false;
+      let gifWorkerBlobUrl = null;
+
+      function setPlayhead(newTime) {
+        playhead = clamp(newTime, 0, totalDuration);
+        scrub.value = String(Math.round((playhead / totalDuration) * 1000));
+      }
+
+      function setPlaying(playing) {
+        isPlaying = playing;
+        playPauseBtn.textContent = isPlaying ? "Pause" : "Play";
+      }
+
+      function setSpeed(nextSpeed) {
+        speed = nextSpeed;
+        for (const b of speedButtons) {
+          b.classList.toggle("active", Number(b.dataset.speed) === nextSpeed);
+        }
+      }
+
+      function setControlsEnabled(enabled) {
+        playPauseBtn.disabled = !enabled;
+        prevStepBtn.disabled = !enabled;
+        nextStepBtn.disabled = !enabled;
+        scrub.disabled = !enabled;
+        resetViewBtn.disabled = !enabled;
+        speedButtons.forEach((b) => {
+          b.disabled = !enabled;
+        });
+      }
+
+      async function ensureGifWorkerBlobUrl() {
+        if (gifWorkerBlobUrl) return gifWorkerBlobUrl;
+
+        const workerCdn = "https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.worker.js";
+        const resp = await fetch(workerCdn, { mode: "cors", cache: "force-cache" });
+        if (!resp.ok) {
+          throw new Error(`Failed to fetch GIF worker: ${resp.status}`);
+        }
+
+        const workerCode = await resp.text();
+        const workerBlob = new Blob([workerCode], { type: "application/javascript" });
+        gifWorkerBlobUrl = URL.createObjectURL(workerBlob);
+        return gifWorkerBlobUrl;
+      }
+
+      const exportProjectVec = new THREE.Vector3();
+
+      function drawExportStageOverlay(ctx, currentStep, uiScale) {
+        const panelX = 10 * uiScale;
+        const panelY = 46 * uiScale;
+        const panelW = 260 * uiScale;
+        const panelPad = 8 * uiScale;
+        const rowH = 24 * uiScale;
+        const rowGap = 6 * uiScale;
+        const panelH = panelPad * 2 + STEPS.length * rowH + (STEPS.length - 1) * rowGap;
+
+        ctx.save();
+        ctx.globalAlpha = 0.94;
+        drawRoundedRect(ctx, panelX, panelY, panelW, panelH, 10 * uiScale);
+        ctx.fillStyle = "rgba(255,255,255,0.84)";
+        ctx.fill();
+        ctx.lineWidth = Math.max(1, 1 * uiScale);
+        ctx.strokeStyle = "rgba(106,154,211,0.42)";
+        ctx.stroke();
+
+        for (let i = 0; i < STEPS.length; i += 1) {
+          const y = panelY + panelPad + i * (rowH + rowGap);
+          const rowX = panelX + panelPad;
+          const rowW = panelW - panelPad * 2;
+          const done = i < currentStep;
+          const active = i === currentStep;
+
+          drawRoundedRect(ctx, rowX, y, rowW, rowH, 8 * uiScale);
+          if (active) {
+            ctx.fillStyle = "rgba(224,240,255,0.96)";
+            ctx.strokeStyle = "rgba(82,155,222,0.78)";
+          } else if (done) {
+            ctx.fillStyle = "rgba(234,251,241,0.95)";
+            ctx.strokeStyle = "rgba(74,171,126,0.5)";
+          } else {
+            ctx.fillStyle = "rgba(244,249,255,0.92)";
+            ctx.strokeStyle = "rgba(140,178,221,0.42)";
+          }
+          ctx.fill();
+          ctx.lineWidth = Math.max(1, 1 * uiScale);
+          ctx.stroke();
+
+          const dotR = 4 * uiScale;
+          const dotX = rowX + 10 * uiScale;
+          const dotY = y + rowH * 0.5;
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+          if (active) {
+            ctx.fillStyle = "#2f93ff";
+          } else if (done) {
+            ctx.fillStyle = "#35c87d";
+          } else {
+            ctx.fillStyle = "rgba(97,143,203,0.82)";
+          }
+          ctx.fill();
+
+          ctx.fillStyle = active ? "#123c67" : done ? "#1f7a53" : "#3e5778";
+          ctx.font = `${Math.max(10, 11 * uiScale)}px "IBM Plex Sans", "Segoe UI", sans-serif`;
+          ctx.textBaseline = "middle";
+          const text = `${i + 1}. ${STEPS[i].title}`;
+          ctx.fillText(text, rowX + 22 * uiScale, dotY);
+        }
+        ctx.restore();
+      }
+
+      function drawExportLabelPill(ctx, text, x, y, opacity, uiScale) {
+        const fontSize = Math.max(11, 11 * uiScale);
+        const padX = 7 * uiScale;
+        const padY = 4 * uiScale;
+        ctx.save();
+        ctx.globalAlpha = clamp(opacity, 0, 1);
+        ctx.font = `${fontSize}px "IBM Plex Sans", "Segoe UI", sans-serif`;
+        ctx.textBaseline = "middle";
+        const textW = ctx.measureText(text).width;
+        const w = textW + padX * 2;
+        const h = fontSize + padY * 2;
+        const left = x - w * 0.5;
+        const top = y - h * 0.5;
+        drawRoundedRect(ctx, left, top, w, h, 8 * uiScale);
+        ctx.fillStyle = "rgba(10,18,33,0.80)";
+        ctx.fill();
+        ctx.lineWidth = Math.max(1, 1 * uiScale);
+        ctx.strokeStyle = "rgba(210,228,255,0.42)";
+        ctx.stroke();
+        ctx.fillStyle = "#f4f8ff";
+        ctx.fillText(text, left + padX, y);
+        ctx.restore();
+      }
+
+      function drawExportConfidenceLabels(ctx, width, height, uiScale) {
+        const drawFromVisual = (visual, labelBoost = 1) => {
+          const text = visual.labelDiv.textContent || "";
+          const opacity = parseFloat(visual.labelDiv.style.opacity || "0") * labelBoost;
+          if (!visual.group.visible || !text || opacity <= 0.02) return;
+
+          visual.labelAnchor.getWorldPosition(exportProjectVec);
+          exportProjectVec.project(camera);
+          if (exportProjectVec.z < -1 || exportProjectVec.z > 1) return;
+
+          const x = (exportProjectVec.x * 0.5 + 0.5) * width;
+          const y = (-exportProjectVec.y * 0.5 + 0.5) * height;
+          drawExportLabelPill(ctx, text, x, y, opacity, uiScale);
+        };
+
+        // final and refine labels are the main confidence labels for each object
+        for (const fv of finalVisuals) {
+          drawFromVisual(fv.visual, 1);
+        }
+        for (const rv of refineVisuals) {
+          drawFromVisual(rv.visual, 1);
+        }
+      }
+
+      // ---------- UI Events ----------
+      playPauseBtn.addEventListener("click", () => {
+        setPlaying(!isPlaying);
+      });
+
+      prevStepBtn.addEventListener("click", () => {
+        const current = stepIndexAt(playhead);
+        const local = stepProgress(current, playhead);
+        const to = local > 0.12 ? current : current - 1;
+        jumpToStep(to);
+        setPlaying(false);
+      });
+
+      nextStepBtn.addEventListener("click", () => {
+        const current = stepIndexAt(playhead);
+        jumpToStep(current + 1);
+        setPlaying(false);
+      });
+
+      scrub.addEventListener("input", (e) => {
+        const v = Number(e.target.value) / 1000;
+        setPlayhead(v * totalDuration);
+      });
+
+      for (const button of speedButtons) {
+        button.addEventListener("click", () => setSpeed(Number(button.dataset.speed)));
+      }
+
+      resetViewBtn.addEventListener("click", () => {
+        camera.position.copy(cameraInitPos);
+        controls.target.copy(targetInitPos);
+        controls.update();
+      });
+
+      async function exportGif() {
+        if (isExporting) return;
+        if (!window.GIF) {
+          alert("GIF encoder failed to load. Please refresh and try again.");
+          return;
+        }
+
+        isExporting = true;
+        const wasPlaying = isPlaying;
+        const prevPlayhead = playhead;
+        setPlaying(false);
+        setControlsEnabled(false);
+        exportGifBtn.disabled = true;
+        exportGifBtn.textContent = "Preparing...";
+
+        let workerScriptUrl = null;
+        try {
+          workerScriptUrl = await ensureGifWorkerBlobUrl();
+        } catch (err) {
+          console.error(err);
+          setControlsEnabled(true);
+          exportGifBtn.disabled = false;
+          exportGifBtn.textContent = "Export GIF";
+          isExporting = false;
+          alert("Failed to initialize GIF worker. Please use localhost and check network access.");
+          return;
+        }
+
+        const restoreRenderer = () => {
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+          labelRenderer.setSize(viewport.clientWidth, viewport.clientHeight);
+          updateBoxLineResolution(renderer.domElement.width, renderer.domElement.height);
+          camera.aspect = viewport.clientWidth / viewport.clientHeight;
+          camera.updateProjectionMatrix();
+          controls.update();
+        };
+
+        const fps = 14;
+        const frameDelay = Math.round(1000 / fps);
+        const frameCount = Math.max(2, Math.floor(totalDuration * fps));
+        const baseW = viewport.clientWidth;
+        const baseH = viewport.clientHeight;
+        const exportScale = 1.45;
+        const gifW = Math.max(960, Math.min(1680, Math.round(baseW * exportScale)));
+        const gifH = Math.max(540, Math.round((gifW / baseW) * baseH));
+
+        renderer.setPixelRatio(1);
+        renderer.setSize(gifW, gifH, false);
+        labelRenderer.setSize(gifW, gifH);
+        updateBoxLineResolution(renderer.domElement.width, renderer.domElement.height);
+        camera.aspect = gifW / gifH;
+        camera.updateProjectionMatrix();
+        controls.update();
+
+        const captureCanvas = document.createElement("canvas");
+        captureCanvas.width = gifW;
+        captureCanvas.height = gifH;
+        const captureCtx = captureCanvas.getContext("2d");
+        captureCtx.fillStyle = "#ffffff";
+        captureCtx.fillRect(0, 0, gifW, gifH);
+
+        const gif = new window.GIF({
+          workers: 3,
+          quality: 7,
+          width: gifW,
+          height: gifH,
+          workerScript: workerScriptUrl,
+          background: "#ffffff"
+        });
+
+        gif.on("progress", (progress) => {
+          exportGifBtn.textContent = `Encoding ${Math.round(progress * 100)}%`;
+        });
+
+        gif.on("finished", (blob) => {
+          const a = document.createElement("a");
+          const url = URL.createObjectURL(blob);
+          const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+          a.href = url;
+          a.download = `voxel-rcnn-demo-${stamp}.gif`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+
+          restoreRenderer();
+          setPlayhead(prevPlayhead);
+          setPlaying(wasPlaying);
+          lastT = performance.now();
+          setControlsEnabled(true);
+          exportGifBtn.disabled = false;
+          exportGifBtn.textContent = "Export GIF";
+          isExporting = false;
+        });
+
+        try {
+          for (let i = 0; i < frameCount; i += 1) {
+            const t = (i / (frameCount - 1)) * totalDuration;
+            setPlayhead(t);
+            updateScene(playhead);
+            controls.update();
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+
+            captureCtx.clearRect(0, 0, gifW, gifH);
+            captureCtx.drawImage(renderer.domElement, 0, 0, gifW, gifH);
+            const currentStep = stepIndexAt(playhead);
+            const uiScale = gifW / Math.max(baseW, 1);
+            drawExportStageOverlay(captureCtx, currentStep, uiScale);
+            drawExportConfidenceLabels(captureCtx, gifW, gifH, uiScale);
+            gif.addFrame(captureCanvas, { copy: true, delay: frameDelay });
+
+            if (i % 3 === 0) {
+              exportGifBtn.textContent = `Capturing ${Math.round((i / (frameCount - 1)) * 100)}%`;
+              await new Promise((resolve) => requestAnimationFrame(resolve));
+            }
+          }
+
+          exportGifBtn.textContent = "Encoding 0%";
+          gif.render();
+        } catch (err) {
+          console.error(err);
+          restoreRenderer();
+          setPlayhead(prevPlayhead);
+          setPlaying(wasPlaying);
+          lastT = performance.now();
+          setControlsEnabled(true);
+          exportGifBtn.disabled = false;
+          exportGifBtn.textContent = "Export GIF";
+          isExporting = false;
+          alert(`GIF export failed: ${err && err.message ? err.message : "unknown error"}`);
+        }
+      }
+
+      exportGifBtn.addEventListener("click", exportGif);
+
+      window.addEventListener("resize", () => {
+        camera.aspect = viewport.clientWidth / viewport.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        labelRenderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        updateBoxLineResolution(renderer.domElement.width, renderer.domElement.height);
+      });
+
+      window.addEventListener("beforeunload", () => {
+        if (gifWorkerBlobUrl) {
+          URL.revokeObjectURL(gifWorkerBlobUrl);
+          gifWorkerBlobUrl = null;
+        }
+      });
+
+      // ---------- Render Update ----------
+      const colorYellow = new THREE.Color(0xffa21a);
+      const colorRed = new THREE.Color(0xff5959);
+      const colorGreen = new THREE.Color(0x00d26a);
+      const colorPurple = new THREE.Color(0x944bff);
+      const tmpColor = new THREE.Color();
+
+      function updateTimeline(currentStep) {
+        statusPill.textContent = `Step ${currentStep + 1} / ${STEPS.length} · ${STEPS[currentStep].title}`;
+
+        stepCards.forEach((card, i) => {
+          card.classList.toggle("active", i === currentStep);
+          card.classList.toggle("done", i < currentStep);
+        });
+
+        stageMiniNodes.forEach((node, i) => {
+          node.classList.toggle("active", i === currentStep);
+          node.classList.toggle("done", i < currentStep);
+        });
+      }
+
+      function updateScene(timeSec) {
+        const currentStep = stepIndexAt(timeSec);
+        updateTimeline(currentStep);
+        const suppressConfidenceLabels = currentStep <= 1;
+
+        const p = STEPS.map((_, i) => stepProgress(i, timeSec));
+        const inStep = STEPS.map((_, i) => (i === currentStep ? p[i] : 0));
+
+        // point cloud
+        pointMaterial.opacity = clamp(0.95 - 0.34 * smooth(p[0]) - 0.24 * smooth(p[1]) - 0.12 * smooth(p[2]) + 0.08 * smooth(p[6]), 0.16, 0.95);
+        pointMaterial.size = lerp(0.13, 0.1, smooth(p[1]));
+
+        // voxels and sparse backbone features
+        const voxelAppear = smooth(p[0]);
+        const backboneAppear = smooth(p[1]);
+        const roiStage = smooth(p[4]);
+        const finalStage = smooth(p[6]);
+        const isBackboneStep = currentStep === 1;
+
+        for (let i = 0; i < voxelVisuals.length; i += 1) {
+          const { mesh, density } = voxelVisuals[i];
+          const pulse = isBackboneStep ? 0.86 + 0.14 * Math.sin(timeSec * 2.4 + i * 0.09) : 1;
+          const sc = lerp(0.02, 1.0, voxelAppear);
+          mesh.scale.setScalar(sc * pulse);
+
+          mesh.material.opacity = clamp((0.5 + density * 0.5) * voxelAppear, 0, 1);
+          mesh.material.emissiveIntensity = 0.08 + (isBackboneStep ? 0.42 : 0.18) * backboneAppear + 0.25 * roiStage;
+        }
+
+        // feature voxels highlighted in sparse backbone
+        for (let i = 0; i < featureVisuals.length; i += 1) {
+          const { mesh, density } = featureVisuals[i];
+
+          let roiBoost = 0;
+          if (roiSamples.length > 0 && roiStage > 0) {
+            for (const rs of roiSamples) {
+              if (rs.roiSet.has(i)) {
+                roiBoost = Math.max(roiBoost, roiStage);
+              }
+            }
+          }
+
+          const pulse = isBackboneStep ? 0.8 + 0.2 * Math.sin(timeSec * 3.2 + i * 0.17) : 1;
+          const vis = backboneAppear;
+          mesh.scale.setScalar(lerp(0.08, 1.0, vis) * pulse);
+
+          mesh.material.opacity = clamp((0.55 + density * 0.45) * vis, 0, 1);
+          tmpColor.set(0x00b3ff).lerp(colorPurple, 0.55 * roiBoost);
+          mesh.material.color.copy(tmpColor);
+          mesh.material.emissive.copy(tmpColor);
+          mesh.material.emissiveIntensity = 0.2 + (isBackboneStep ? 0.42 : 0.12) * backboneAppear + 0.35 * roiBoost;
+        }
+
+        // proposals generated by RPN
+        const rpnAppear = smooth(p[2]);
+        const rpnCount = Math.floor(lerp(4, proposalVisuals.length, rpnAppear));
+
+        const nmsInStep = currentStep === 3 ? inStep[3] : currentStep > 3 ? 1 : 0;
+        const nmsTailFade = currentStep === 3 ? (nmsInStep < 0.72 ? 1 : clamp(1 - (nmsInStep - 0.72) / 0.28, 0, 1)) : currentStep < 3 ? 1 : 0;
+        const refineGlobal = smooth(p[5]);
+        const preRefineFade = currentStep >= 6 ? 1 - smooth(p[6]) : 1;
+
+        for (let i = 0; i < proposalVisuals.length; i += 1) {
+          const item = proposalVisuals[i];
+          const { proposal, visual } = item;
+          const spawned = i < rpnCount;
+          const inScoreFiltered = scoreFilteredIds.has(proposal.id);
+          const suppressed = suppressIds.has(proposal.id);
+          const kept = keepIds.has(proposal.id);
+          const selected = selectedForRoi.includes(proposal.id);
+
+          let visible = false;
+          let fillOpacity = 0;
+          let wireOpacity = 0;
+          let labelOpacity = 0;
+          let color = colorYellow;
+
+          if (rpnAppear > 0 && spawned) {
+            visible = true;
+
+            if (currentStep <= 2) {
+              // In RPN, show spawned proposals first; score-based filtering starts in NMS.
+              const rpnProg = inStep[2] || rpnAppear;
+              fillOpacity = lerp(0.02, 0.16, rpnProg);
+              wireOpacity = lerp(0.14, 0.56, rpnProg);
+            } else {
+              if (!inScoreFiltered) {
+                if (currentStep === 3) {
+                  // Low-score proposals fade at the end of NMS.
+                  fillOpacity = 0.03 * nmsTailFade;
+                  wireOpacity = 0.18 * nmsTailFade;
+                  visible = nmsTailFade > 0.01;
+                } else {
+                  visible = false;
+                }
+              } else if (suppressed) {
+                if (currentStep === 3) {
+                  // Suppressed boxes also fade out only at the end of NMS.
+                  fillOpacity = 0.22 * nmsTailFade;
+                  wireOpacity = 0.82 * nmsTailFade;
+                  color = colorRed;
+                  visible = nmsTailFade > 0.01;
+                } else {
+                  visible = false;
+                }
+              } else if (kept) {
+                if (currentStep === 3) {
+                  if (selected) {
+                    fillOpacity = 0.14;
+                    wireOpacity = 0.62;
+                  } else {
+                    // Non-selected kept proposals fade at end of NMS, then disappear before RoI.
+                    fillOpacity = 0.12 * nmsTailFade;
+                    wireOpacity = 0.5 * nmsTailFade;
+                    visible = nmsTailFade > 0.01;
+                  }
+                } else if (selected && currentStep < 6) {
+                  fillOpacity = 0.14 * (1 - 0.72 * refineGlobal) * preRefineFade;
+                  wireOpacity = 0.62 * (1 - 0.74 * refineGlobal) * preRefineFade;
+                  if (selected && p[4] > 0) {
+                    color = tmpColor.copy(colorYellow).lerp(colorPurple, 0.2 + 0.45 * roiStage);
+                  }
+                } else {
+                  visible = false;
+                }
+              } else {
+                visible = false;
+              }
+            }
+          }
+
+          visual.group.visible = visible;
+          visual.fillMat.opacity = fillOpacity;
+          visual.wireMat.opacity = wireOpacity;
+          visual.wireOuterMat.opacity = wireOpacity * 0.85;
+          visual.fillMat.color.copy(color);
+          visual.fillMat.emissive.copy(color);
+          visual.wireMat.color.copy(color);
+          visual.wireOuterMat.color.copy(color);
+
+          const allowProposalLabel = currentStep >= 4;
+          if (!suppressConfidenceLabels && allowProposalLabel && (labelProposalIds.has(proposal.id) || selectedForRoi.includes(proposal.id))) {
+            labelOpacity = clamp(wireOpacity * 1.2, 0, 0.9);
+            visual.labelDiv.style.opacity = String(labelOpacity);
+            visual.labelDiv.textContent = `${proposal.cls} ${(proposal.score * 100).toFixed(1)}%`;
+          } else {
+            visual.labelDiv.style.opacity = "0";
+          }
+        }
+
+        // RoI grid pooling (purple sample points)
+        for (const roi of roiSamples) {
+          const proposalItem = proposalVisualMap.get(roi.proposalId);
+          if (!proposalItem) continue;
+
+          const roiStrength = clamp((smooth(p[4]) - 0.04) / 0.96, 0, 1);
+          const roiGate = currentStep === 4 ? 1 : 0;
+          const base = roiStrength * roiGate;
+
+          roi.sampleVisuals.forEach((s, idx) => {
+            const stagger = clamp(base * 1.35 - idx * 0.018, 0, 1);
+            s.mesh.material.opacity = 1.0 * stagger;
+            const scale = lerp(0.16, 1.2, stagger);
+            s.mesh.scale.setScalar(scale);
+          });
+
+          roi.roiLinkVisuals.forEach((link) => {
+            const end = proposalItem.visual.group.position;
+            const arr = link.line.geometry.attributes.position.array;
+            arr[0] = link.startWorld.x;
+            arr[1] = link.startWorld.y;
+            arr[2] = link.startWorld.z;
+            arr[3] = end.x;
+            arr[4] = end.y;
+            arr[5] = end.z;
+            link.line.geometry.attributes.position.needsUpdate = true;
+
+            const pulse = 0.72 + 0.28 * Math.sin(timeSec * 6.4 + link.pulseSeed);
+            const alpha = 0.85 * base * pulse;
+            link.line.material.opacity = alpha;
+            link.line.visible = alpha > 0.01;
+          });
+
+          // keep proposal visible during RoI stage
+          if (proposalItem.visual.group.visible && p[4] > 0) {
+            proposalItem.visual.wireMat.opacity = Math.max(proposalItem.visual.wireMat.opacity, 0.9 * roiStage);
+            proposalItem.visual.wireOuterMat.opacity = Math.max(proposalItem.visual.wireOuterMat.opacity, 0.9 * roiStage * 0.85);
+          }
+        }
+
+        // second-stage refinement
+        for (const rv of refineVisuals) {
+          const { seed, visual } = rv;
+          const refineLocal = ease(p[5]);
+          const finalLocal = smooth(p[6]);
+          const show = p[5] > 0 || p[6] > 0;
+
+          visual.group.visible = show;
+
+          const boxNow = {
+            center: {
+              x: lerp(seed.proposal.center.x, seed.target.center.x, refineLocal),
+              y: lerp(seed.proposal.center.y, seed.target.center.y, refineLocal),
+              z: lerp(seed.proposal.center.z, seed.target.center.z, refineLocal)
+            },
+            size: {
+              l: lerp(seed.proposal.size.l, seed.target.size.l, refineLocal),
+              w: lerp(seed.proposal.size.w, seed.target.size.w, refineLocal),
+              h: lerp(seed.proposal.size.h, seed.target.size.h, refineLocal)
+            },
+            yaw: lerp(seed.proposal.yaw, seed.target.yaw, refineLocal)
+          };
+
+          applyBoxState(visual, boxNow);
+
+          const boxColor = tmpColor.copy(colorYellow).lerp(colorGreen, refineLocal * 0.95);
+          visual.fillMat.color.copy(boxColor);
+          visual.fillMat.emissive.copy(boxColor);
+          visual.wireMat.color.copy(boxColor);
+          visual.wireOuterMat.color.copy(boxColor);
+
+          const fadeToFinal = 1 - finalLocal;
+          visual.fillMat.opacity = (0.18 + 0.1 * refineLocal) * fadeToFinal;
+          visual.wireMat.opacity = (0.78 + 0.15 * refineLocal) * fadeToFinal;
+          visual.wireOuterMat.opacity = (0.78 + 0.15 * refineLocal) * fadeToFinal * 0.85;
+
+          const score = lerp(seed.scoreStart, seed.scoreEnd, refineLocal);
+          visual.labelDiv.textContent = `${seed.target.cls} ${(score * 100).toFixed(1)}%`;
+          visual.labelDiv.style.opacity = suppressConfidenceLabels ? "0" : String(clamp(0.12 + 0.82 * refineLocal, 0, 0.95) * fadeToFinal);
+        }
+
+        // final boxes
+        for (const fv of finalVisuals) {
+          const { target, visual } = fv;
+          const q = ease(p[6]);
+          const pulse = 0.88 + 0.12 * Math.sin(timeSec * 3.8 + target.center.x * 0.2);
+          visual.group.visible = q > 0.001;
+          visual.group.scale.set(target.size.l, target.size.h, target.size.w);
+          visual.group.position.copy(lidarToWorld(target.center.x, target.center.y, target.center.z));
+          visual.group.rotation.y = -target.yaw;
+          visual.labelAnchor.position.set(0, target.size.h * 0.62 + 0.22, 0);
+
+          visual.fillMat.opacity = 0.22 * q * pulse;
+          visual.wireMat.opacity = 0.95 * q;
+          visual.wireOuterMat.opacity = 0.95 * q * 0.85;
+          visual.fillMat.emissiveIntensity = 0.4 + 0.4 * q;
+          visual.labelDiv.style.opacity = suppressConfidenceLabels ? "0" : String(0.96 * q);
+          visual.labelDiv.textContent = `${target.cls} ${(target.finalScore * 100).toFixed(1)}%`;
+        }
+      }
+
+      function tick(now) {
+        if (isExporting) {
+          requestAnimationFrame(tick);
+          return;
+        }
+
+        const dt = (now - lastT) / 1000;
+        lastT = now;
+
+        if (isPlaying) {
+          const next = playhead + dt * speed;
+          if (next >= totalDuration) {
+            setPlayhead(totalDuration);
+            setPlaying(false);
+          } else {
+            setPlayhead(next);
+          }
+        }
+
+        updateScene(playhead);
+        controls.update();
+        renderer.render(scene, camera);
+        labelRenderer.render(scene, camera);
+        requestAnimationFrame(tick);
+      }
+
+      setPlayhead(0);
+      setSpeed(1);
+      setPlaying(true);
+      requestAnimationFrame(tick);
+    </script>
+  </body>
+</html>
